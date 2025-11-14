@@ -13,6 +13,7 @@ from .box_score import BoxScoreFetcher
 from .ocr_engine import OCREngine
 from .event_matcher import EventMatcher
 from .file_manager import FileManager
+from .models import GameInfo, Event, VideoTimestamp, PipelineResult
 
 __all__ = [
     'VideoProcessor',
@@ -20,4 +21,8 @@ __all__ = [
     'OCREngine',
     'EventMatcher',
     'FileManager',
+    'GameInfo',
+    'Event',
+    'VideoTimestamp',
+    'PipelineResult',
 ]

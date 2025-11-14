@@ -52,22 +52,26 @@ class EventMatcher:
 
         for event in events:
             try:
-                # Find closest video timestamp for this event
-                video_time = self._find_closest_timestamp(
+                # Find closest video timestamp for this event with confidence
+                match_result = self._find_closest_timestamp_with_confidence(
                     event,
                     video_timestamps,
                     tolerance_seconds
                 )
 
-                if video_time is not None:
-                    # Create new event dict with video_time
+                if match_result is not None:
+                    video_time, confidence, time_diff = match_result
+
+                    # Create new event dict with video_time and confidence
                     matched_event = event.copy()
                     matched_event['video_time'] = video_time
+                    matched_event['match_confidence'] = confidence
+                    matched_event['match_time_diff_seconds'] = time_diff
                     matched_events.append(matched_event)
 
                     logger.debug(
                         f"Matched {event['type']} at P{event['period']} {event['time']} "
-                        f"to video time {video_time:.1f}s"
+                        f"to video time {video_time:.1f}s (confidence: {confidence:.2f}, diff: {time_diff:.1f}s)"
                     )
                 else:
                     logger.warning(
@@ -140,6 +144,80 @@ class EventMatcher:
 
         # If exact period match failed, try interpolation
         return self._interpolate_timestamp(event, video_timestamps)
+
+    def _find_closest_timestamp_with_confidence(
+        self,
+        event: Dict,
+        video_timestamps: List[Dict],
+        tolerance_seconds: int
+    ) -> Optional[Tuple[float, float, float]]:
+        """
+        Find the closest video timestamp for a box score event with confidence score
+
+        Args:
+            event: Event dictionary with period and time
+            video_timestamps: List of video timestamp dictionaries
+            tolerance_seconds: Maximum allowed time difference
+
+        Returns:
+            Tuple of (video_time, confidence, time_diff) or None if no match found
+            confidence: 1.0 for exact match, decreases linearly to 0.0 at tolerance limit
+        """
+        event_period = event.get('period')
+        event_time = event.get('time', '00:00')
+
+        # Convert event time to seconds
+        event_seconds = self._time_to_seconds(event_time)
+
+        # Filter timestamps for matching period
+        period_timestamps = [
+            ts for ts in video_timestamps
+            if ts.get('period') == event_period
+        ]
+
+        if not period_timestamps:
+            # Try interpolation if we have timestamps before and after this period
+            video_time = self._interpolate_timestamp(event, video_timestamps)
+            if video_time is not None:
+                # Lower confidence for interpolated matches
+                return (video_time, 0.5, tolerance_seconds / 2)
+            return None
+
+        # Find timestamp with closest game time
+        best_match = None
+        best_diff = float('inf')
+
+        for ts in period_timestamps:
+            ts_seconds = ts.get('game_time_seconds', 0)
+
+            # Calculate time difference
+            # Note: Hockey clocks count DOWN, so we need to handle this
+            time_diff = abs(event_seconds - ts_seconds)
+
+            if time_diff < best_diff:
+                best_diff = time_diff
+                best_match = ts
+
+        # Check if match is within tolerance
+        if best_match and best_diff <= tolerance_seconds:
+            video_time = best_match['video_time']
+
+            # Calculate confidence: 1.0 for exact match, 0.0 at tolerance limit
+            # Using linear decay for simplicity
+            if best_diff == 0:
+                confidence = 1.0
+            else:
+                confidence = max(0.0, 1.0 - (best_diff / tolerance_seconds))
+
+            return (video_time, confidence, best_diff)
+
+        # If exact period match failed, try interpolation
+        video_time = self._interpolate_timestamp(event, video_timestamps)
+        if video_time is not None:
+            # Very low confidence for interpolated matches outside tolerance
+            return (video_time, 0.3, tolerance_seconds)
+
+        return None
 
     def _interpolate_timestamp(
         self,
