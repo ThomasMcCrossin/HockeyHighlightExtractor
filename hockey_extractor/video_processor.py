@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional, Tuple
 import numpy as np
+from tqdm import tqdm
 
 try:
     from moviepy import VideoFileClip, concatenate_videoclips
@@ -143,11 +144,20 @@ class VideoProcessor:
 
         created_clips = []
 
-        for i, event in enumerate(events, 1):
+        # Create progress bar for clip creation
+        progress_bar = tqdm(
+            events,
+            desc="Creating Clips",
+            unit="clip",
+            ncols=100
+        )
+
+        for i, event in enumerate(progress_bar, 1):
             try:
                 video_time = event.get('video_time')
                 if video_time is None:
                     logger.warning(f"Event {i} missing video_time")
+                    progress_bar.set_postfix({'status': 'skipped'})
                     continue
 
                 # Calculate clip boundaries
@@ -162,8 +172,11 @@ class VideoProcessor:
                 clip_filename = f"{i:02d}_{event_type}_P{period}_{team}.mp4"
                 clip_path = clips_dir / clip_filename
 
+                # Update progress bar with current clip info
+                progress_bar.set_postfix({'clip': clip_filename[:30]})
+
                 # Create and save clip
-                logger.info(f"Creating clip {i}/{len(events)}: {clip_filename}")
+                logger.debug(f"Creating clip {i}/{len(events)}: {clip_filename}")
 
                 clip = self.create_clip(start_time, end_time, clip_path)
 
@@ -171,10 +184,15 @@ class VideoProcessor:
                     created_clips.append((event, clip_path))
                     # Close clip to free memory
                     clip.close()
+                    progress_bar.set_postfix({'status': 'done'})
 
             except Exception as e:
                 logger.error(f"Failed to create clip {i}: {e}")
+                progress_bar.set_postfix({'status': 'error'})
                 continue
+
+        # Close progress bar
+        progress_bar.close()
 
         logger.info(f"Created {len(created_clips)}/{len(events)} highlight clips")
         return created_clips
@@ -207,14 +225,25 @@ class VideoProcessor:
 
             logger.info(f"Creating highlights reel from {len(clip_paths)} clips")
 
-            # Load all clips
+            # Load all clips with progress bar
             clips = []
-            for clip_path in clip_paths:
+            progress_bar = tqdm(
+                clip_paths,
+                desc="Loading Clips",
+                unit="clip",
+                ncols=100
+            )
+
+            for clip_path in progress_bar:
                 try:
+                    progress_bar.set_postfix({'file': clip_path.name[:30]})
                     clip = VideoFileClip(str(clip_path))
                     clips.append(clip)
                 except Exception as e:
                     logger.warning(f"Failed to load clip {clip_path}: {e}")
+                    progress_bar.set_postfix({'status': 'error'})
+
+            progress_bar.close()
 
             if not clips:
                 logger.error("No clips could be loaded")
