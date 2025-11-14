@@ -205,3 +205,25 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Hockey Highlight Extractor specific
+Games/                    # Output directory with processed videos
+temp/                     # Temporary files
+logs/                     # Log files
+*.mp4                     # Video files (too large for git)
+*.ts                      # Video files
+*.avi                     # Video files
+*.mov                     # Video files
+*.mkv                     # Video files
+*.flv                     # Video files
+*.wmv                     # Video files
+*.webm                    # Video files
+*.m4v                     # Video files
+
+# Old v1.0 output files (deprecated)
+highlights_report.json
+highlights_timeline.csv
+processing_log.txt
+temp_hockey_log.txt
+outputlast.txt
+hockey_highlight_extractor.py  # Old monolithic file (replaced by modular structure)
