@@ -1,0 +1,138 @@
+def load_video_and_audio(self):
+    """Load video and audio with bulletproof error handling"""
+    logger.info("🎬 Loading video and audio.")
+    
+    try:
+        if not self.video_path.exists():
+            logger.error(f"Video file not found: {self.video_path}")
+            return False
+        
+        file_size = self.video_path.stat().st_size / (1024 * 1024)
+        logger.info(f"File size: {file_size:.1f}MB")
+        
+        # Load video
+        logger.debug("Creating VideoFileClip.")
+        self.video_clip = safe_operation("VideoFileClip", VideoFileClip, str(self.video_path))
+        logger.info(f"✅ Video loaded: {self.video_clip.duration/60:.1f}min, {self.video_clip.size}, {self.video_clip.fps}fps")
+        
+        if not self.video_clip.audio:
+            logger.error("No audio track found")
+            return False
+        
+        # Extract audio to temp file in logs folder
+        logger.info("🎵 Extracting audio.")
+        temp_audio = self.folders['logs_dir'] / "temp_audio.wav"
+        
+        try:
+            # Write a standard PCM WAV that libsndfile likes
+            write_audiofile_compat(
+                self.video_clip.audio,
+                str(temp_audio),
+                fps=44100,              # sample rate
+                nbytes=2,               # 16-bit
+                codec="pcm_s16le",      # explicit PCM
+                ffmpeg_params=["-ac", "2"],  # 2 channels
+                logger=None
+            )
+            logger.debug("Audio extracted to temp file")
+            
+            # Ensure the file is really present and non-empty (cloud sync can lag)
+            for _ in range(15):  # ~3s max
+                try:
+                    if temp_audio.exists() and temp_audio.stat().st_size > 0:
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.2)
+            
+            # Load WAV – try soundfile first, then scipy, then re-extract locally if needed
+            try:
+                audio_data, original_sr = sf.read(str(temp_audio), always_2d=False)
+                logger.info(
+                    f"Raw audio: {len(audio_data)} samples at {original_sr}Hz, "
+                    f"dtype: {getattr(audio_data, 'dtype', None)}"
+                )
+            except Exception as e_sf:
+                logger.warning(f"soundfile failed: {e_sf} — trying scipy.io.wavfile")
+                try:
+                    from scipy.io import wavfile as _wavfile
+                    original_sr, audio_data = _wavfile.read(str(temp_audio))  # returns int dtype
+                    logger.info(
+                        f"Raw audio (scipy): {len(audio_data)} samples at {original_sr}Hz, "
+                        f"dtype: {getattr(audio_data, 'dtype', None)}"
+                    )
+                    # Convert to float32 [-1,1] if needed
+                    if hasattr(audio_data, 'dtype') and str(audio_data.dtype).startswith('int'):
+                        max_val = float(np.iinfo(audio_data.dtype).max)
+                        audio_data = audio_data.astype(np.float32) / max_val
+                except Exception as e_wav:
+                    # Last resort: re-extract to a local temp dir (avoid cloud sync issues) and try again
+                    from pathlib import Path as _Path
+                    local_temp = _Path(tempfile.gettempdir()) / f"temp_audio_{uuid4().hex}.wav"
+                    logger.warning(f"scipy also failed: {e_wav} — re-extracting to local temp: {local_temp}")
+                    write_audiofile_compat(
+                        self.video_clip.audio,
+                        str(local_temp),
+                        fps=44100, nbytes=2, codec="pcm_s16le", ffmpeg_params=["-ac", "2"],
+                        logger=None
+                    )
+                    # small wait for disk
+                    for _ in range(10):
+                        if local_temp.exists() and local_temp.stat().st_size > 0:
+                            break
+                        time.sleep(0.2)
+                    audio_data, original_sr = sf.read(str(local_temp), always_2d=False)
+                    try:
+                        local_temp.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+            
+            # Convert stereo to mono
+            if getattr(audio_data, "ndim", 1) == 2:
+                logger.info("Converting stereo to mono")
+                audio_data = audio_data.mean(axis=1)
+            
+            # Clean audio data
+            audio_data = clean_audio_data(audio_data)
+            if audio_data is None:
+                logger.error("Audio cleaning failed")
+                return False
+            
+            # Resample if needed
+            if original_sr != self.audio_sr:
+                logger.info(f"Resampling {original_sr}Hz -> {self.audio_sr}Hz")
+                try:
+                    audio_data = safe_operation(
+                        "librosa.resample",
+                        librosa.resample,
+                        y=audio_data,
+                        orig_sr=original_sr,
+                        target_sr=self.audio_sr
+                    )
+                except Exception as e:
+                    logger.warning(f"Librosa resample failed: {e}, using decimation")
+                    if original_sr > self.audio_sr:
+                        step = int(original_sr / self.audio_sr)
+                        audio_data = audio_data[::step]
+            
+            self.audio_data = audio_data
+            logger.info(f"✅ Final audio: {len(self.audio_data)/self.audio_sr:.1f}s at {self.audio_sr}Hz")
+            
+            # Cleanup temp file
+            if temp_audio.exists():
+                try:
+                    temp_audio.unlink()
+                except Exception:
+                    pass
+            
+            return True
+        
+        except Exception as audio_error:
+            logger.error(f"Audio extraction failed: {audio_error}")
+            logger.error(traceback.format_exc())
+            return False
+            
+    except Exception as e:
+        logger.error(f"Video loading failed: {e}")
+        logger.error(traceback.format_exc())
+        return False
