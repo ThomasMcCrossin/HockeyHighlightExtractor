@@ -7,6 +7,7 @@ import time
 from typing import Dict, List, Optional
 from datetime import datetime
 import requests
+from requests.adapters import HTTPAdapter, Retry
 from pathlib import Path
 import json
 
@@ -43,6 +44,35 @@ class BoxScoreFetcher:
         self.cache_dir = cache_dir
         if cache_dir:
             cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create session with retry logic
+        self.session = self._create_session_with_retries()
+
+    def _create_session_with_retries(self) -> requests.Session:
+        """
+        Create a requests session with retry logic
+
+        Returns:
+            Configured requests.Session object
+        """
+        session = requests.Session()
+
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=3,                          # Total number of retries
+            backoff_factor=1,                 # Wait 1s, 2s, 4s between retries
+            status_forcelist=[429, 500, 502, 503, 504],  # Retry on these HTTP status codes
+            allowed_methods=["HEAD", "GET", "OPTIONS"]   # Only retry safe methods
+        )
+
+        # Mount adapter with retry strategy
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+
+        logger.debug("Created HTTP session with retry logic (3 retries, exponential backoff)")
+
+        return session
 
     def find_game(
         self,
@@ -87,22 +117,41 @@ class BoxScoreFetcher:
 
             logger.info(f"Searching for game: {home_team} vs {away_team} on {game_date}")
 
-            # Fetch schedule
-            response = requests.get(
+            # Fetch schedule with retry logic
+            response = self.session.get(
                 f"{self.API_BASE}index.php",
                 params=params,
-                timeout=10
+                timeout=(5, 15)  # (connect timeout, read timeout)
             )
             response.raise_for_status()
 
             schedule_data = response.json()
 
+            # Validate API response structure
+            if not isinstance(schedule_data, dict):
+                raise ValueError(f"Unexpected API response type: {type(schedule_data).__name__}")
+
+            if 'SiteKit' not in schedule_data:
+                raise ValueError(
+                    f"Unexpected API response structure - missing 'SiteKit' key. "
+                    f"Available keys: {list(schedule_data.keys())}"
+                )
+
+            site_kit = schedule_data.get('SiteKit', {})
+            if not isinstance(site_kit, dict):
+                raise ValueError(f"'SiteKit' is not a dictionary: {type(site_kit).__name__}")
+
+            if 'Schedule' not in site_kit:
+                raise ValueError(
+                    f"Unexpected API response structure - missing 'Schedule' key in SiteKit. "
+                    f"Available keys: {list(site_kit.keys())}"
+                )
+
             # Parse date for comparison
             target_date = datetime.strptime(game_date, '%Y-%m-%d').date()
 
             # Search for matching game
-            # Note: Adjust this based on actual API response structure
-            games = schedule_data.get('SiteKit', {}).get('Schedule', [])
+            games = site_kit.get('Schedule', [])
 
             for game in games:
                 game_date_str = game.get('date_played', '')
@@ -173,14 +222,25 @@ class BoxScoreFetcher:
             # Add delay to be polite to API
             time.sleep(0.2)
 
-            response = requests.get(
+            # Fetch box score with retry logic
+            response = self.session.get(
                 f"{self.API_BASE}index.php",
                 params=params,
-                timeout=10
+                timeout=(5, 15)  # (connect timeout, read timeout)
             )
             response.raise_for_status()
 
             box_score = response.json()
+
+            # Validate API response structure
+            if not isinstance(box_score, dict):
+                raise ValueError(f"Unexpected API response type: {type(box_score).__name__}")
+
+            if 'SiteKit' not in box_score:
+                raise ValueError(
+                    f"Unexpected box score response structure - missing 'SiteKit' key. "
+                    f"Available keys: {list(box_score.keys())}"
+                )
 
             # Cache the result
             if self.cache_dir:
@@ -208,8 +268,18 @@ class BoxScoreFetcher:
 
         try:
             # Navigate to the game data structure
-            # Note: Adjust based on actual API response structure
-            game_data = box_score.get('SiteKit', {}).get('Gamesummary', {})
+            site_kit = box_score.get('SiteKit', {})
+            if not isinstance(site_kit, dict):
+                raise ValueError(f"'SiteKit' is not a dictionary: {type(site_kit).__name__}")
+
+            if 'Gamesummary' not in site_kit:
+                logger.warning(
+                    f"'Gamesummary' key not found in SiteKit. "
+                    f"Available keys: {list(site_kit.keys())}"
+                )
+                return []
+
+            game_data = site_kit.get('Gamesummary', {})
 
             # Extract goals
             goals = game_data.get('goals', []) or game_data.get('scoring_plays', [])

@@ -8,6 +8,7 @@ from typing import Optional, Tuple, List, Dict
 from pathlib import Path
 import numpy as np
 import cv2
+from tqdm import tqdm
 
 try:
     import pytesseract
@@ -32,8 +33,25 @@ class OCREngine:
         self.config = config
         self.scoreboard_roi: Optional[Tuple[int, int, int, int]] = None  # (x, y, w, h)
 
+        # Validate pytesseract is installed
         if not TESSERACT_AVAILABLE:
-            logger.error("pytesseract not available - install with: pip install pytesseract")
+            raise RuntimeError(
+                "pytesseract not installed. Install with: pip install pytesseract"
+            )
+
+        # Validate tesseract-ocr system package is installed
+        try:
+            pytesseract.get_tesseract_version()
+            logger.debug(f"Tesseract version: {pytesseract.get_tesseract_version()}")
+        except Exception as e:
+            raise RuntimeError(
+                "tesseract-ocr system package not found. "
+                "Install it:\n"
+                "  macOS: brew install tesseract\n"
+                "  Ubuntu/Debian: sudo apt-get install tesseract-ocr\n"
+                "  Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki\n"
+                f"Error: {e}"
+            )
 
     def detect_scoreboard_roi(
         self,
@@ -247,33 +265,49 @@ class OCREngine:
 
     def _validate_time_format(self, time_str: str) -> bool:
         """
-        Validate time string format (MM:SS)
+        Validate time string format (MM:SS) and sanity check values
 
         Args:
             time_str: Time string to validate
 
         Returns:
-            True if valid format
+            True if valid format and sane values
         """
         try:
             parts = time_str.split(':')
             if len(parts) != 2:
+                logger.debug(f"Invalid time format (not MM:SS): {time_str}")
                 return False
 
             minutes = int(parts[0])
             seconds = int(parts[1])
 
-            # Hockey periods are 20 minutes
-            return 0 <= minutes <= 20 and 0 <= seconds <= 59
+            # Validate seconds range
+            if not (0 <= seconds <= 59):
+                logger.warning(
+                    f"Invalid time '{time_str}' - seconds must be 0-59 (got {seconds})"
+                )
+                return False
 
-        except (ValueError, AttributeError):
+            # Hockey periods are 20 minutes max
+            if not (0 <= minutes <= 20):
+                logger.warning(
+                    f"Invalid time '{time_str}' - hockey periods are 20 minutes max (got {minutes})"
+                )
+                return False
+
+            return True
+
+        except (ValueError, AttributeError) as e:
+            logger.debug(f"Failed to parse time '{time_str}': {e}")
             return False
 
     def sample_video_times(
         self,
         video_processor,
         sample_interval: int = 30,
-        max_samples: Optional[int] = None
+        max_samples: Optional[int] = None,
+        debug_dir: Optional[Path] = None
     ) -> List[Dict]:
         """
         Sample time from video at regular intervals
@@ -282,6 +316,7 @@ class OCREngine:
             video_processor: VideoProcessor instance with loaded video
             sample_interval: Seconds between samples
             max_samples: Maximum number of samples (None for all)
+            debug_dir: Optional directory to save debug frames (auto-saves first/middle/last)
 
         Returns:
             List of dictionaries with {video_time, period, game_time}
@@ -290,8 +325,30 @@ class OCREngine:
 
         try:
             duration = video_processor.duration
-            current_time = 0.0
 
+            # Calculate total number of samples for progress bar
+            total_samples = int(duration / sample_interval) + 1
+            if max_samples:
+                total_samples = min(total_samples, max_samples)
+
+            # Determine which samples to save as debug frames
+            debug_sample_indices = set()
+            if total_samples > 0:
+                debug_sample_indices = {
+                    0,                          # First sample
+                    total_samples // 2,         # Middle sample
+                    total_samples - 1           # Last sample
+                }
+
+            # Create progress bar
+            progress_bar = tqdm(
+                total=total_samples,
+                desc="OCR Sampling",
+                unit="frame",
+                ncols=100
+            )
+
+            current_time = 0.0
             sample_count = 0
 
             while current_time < duration:
@@ -303,6 +360,13 @@ class OCREngine:
                 frame = video_processor.get_frame_at_time(current_time)
 
                 if frame is not None:
+                    # Save debug frame for first, middle, and last samples
+                    if debug_dir and sample_count in debug_sample_indices:
+                        roi = self.scoreboard_roi or self.detect_scoreboard_roi(frame)
+                        debug_path = debug_dir / f"debug_ocr_frame_{sample_count:04d}_{current_time:.1f}s.jpg"
+                        self.save_debug_frame(frame, debug_path, roi)
+                        logger.debug(f"Saved debug frame: {debug_path}")
+
                     # Extract time from frame
                     result = self.extract_time_from_frame(frame)
 
@@ -315,12 +379,23 @@ class OCREngine:
                             'game_time_seconds': self._time_to_seconds(game_time)
                         })
                         logger.debug(f"Sample at {current_time:.1f}s: P{period} {game_time}")
+                        # Update progress bar description with latest result
+                        progress_bar.set_postfix({'latest': f"P{period} {game_time}"})
+
+                # Update progress bar
+                progress_bar.update(1)
 
                 # Move to next sample
                 current_time += sample_interval
                 sample_count += 1
 
+            # Close progress bar
+            progress_bar.close()
+
             logger.info(f"Sampled {len(timestamps)} timestamps from video")
+            if debug_dir and debug_sample_indices:
+                logger.info(f"Debug frames saved to: {debug_dir}")
+
             return timestamps
 
         except Exception as e:

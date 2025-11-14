@@ -192,7 +192,8 @@ def process_video(video_path: Path, logger: logging.Logger) -> bool:
         video_timestamps = ocr_engine.sample_video_times(
             video_processor,
             sample_interval=30,  # Sample every 30 seconds
-            max_samples=None     # Sample entire video
+            max_samples=None,    # Sample entire video
+            debug_dir=game_folders['data_dir']  # Save debug frames to data directory
         )
 
         if not video_timestamps:
