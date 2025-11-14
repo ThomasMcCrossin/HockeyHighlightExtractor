@@ -14,6 +14,7 @@ from .ocr_engine import OCREngine
 from .event_matcher import EventMatcher
 from .file_manager import FileManager
 from .models import GameInfo, Event, VideoTimestamp, PipelineResult
+from .pipeline import HighlightPipeline
 
 __all__ = [
     'VideoProcessor',
@@ -25,4 +26,5 @@ __all__ = [
     'Event',
     'VideoTimestamp',
     'PipelineResult',
+    'HighlightPipeline',
 ]
