@@ -193,7 +193,9 @@ def process_video(video_path: Path, logger: logging.Logger) -> bool:
             video_processor,
             sample_interval=30,  # Sample every 30 seconds
             max_samples=None,    # Sample entire video
-            debug_dir=game_folders['data_dir']  # Save debug frames to data directory
+            debug_dir=game_folders['data_dir'],  # Save debug frames to data directory
+            parallel=True,       # Use parallel processing for 4x speedup
+            workers=4            # Number of worker threads
         )
 
         if not video_timestamps:

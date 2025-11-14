@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import pytesseract
@@ -307,10 +308,50 @@ class OCREngine:
         video_processor,
         sample_interval: int = 30,
         max_samples: Optional[int] = None,
-        debug_dir: Optional[Path] = None
+        debug_dir: Optional[Path] = None,
+        parallel: bool = True,
+        workers: int = 4
     ) -> List[Dict]:
         """
         Sample time from video at regular intervals
+
+        Args:
+            video_processor: VideoProcessor instance with loaded video
+            sample_interval: Seconds between samples
+            max_samples: Maximum number of samples (None for all)
+            debug_dir: Optional directory to save debug frames (auto-saves first/middle/last)
+            parallel: Whether to use parallel processing (default True)
+            workers: Number of worker threads for parallel processing (default 4)
+
+        Returns:
+            List of dictionaries with {video_time, period, game_time}
+        """
+        # Use parallel or sequential implementation based on flag
+        if parallel and workers > 1:
+            return self._sample_video_times_parallel(
+                video_processor,
+                sample_interval,
+                max_samples,
+                debug_dir,
+                workers
+            )
+        else:
+            return self._sample_video_times_sequential(
+                video_processor,
+                sample_interval,
+                max_samples,
+                debug_dir
+            )
+
+    def _sample_video_times_sequential(
+        self,
+        video_processor,
+        sample_interval: int = 30,
+        max_samples: Optional[int] = None,
+        debug_dir: Optional[Path] = None
+    ) -> List[Dict]:
+        """
+        Sample time from video sequentially (original implementation)
 
         Args:
             video_processor: VideoProcessor instance with loaded video
@@ -401,6 +442,168 @@ class OCREngine:
         except Exception as e:
             logger.error(f"Failed to sample video times: {e}")
             return []
+
+    def _sample_video_times_parallel(
+        self,
+        video_processor,
+        sample_interval: int = 30,
+        max_samples: Optional[int] = None,
+        debug_dir: Optional[Path] = None,
+        workers: int = 4
+    ) -> List[Dict]:
+        """
+        Sample time from video in parallel using ThreadPoolExecutor
+
+        Args:
+            video_processor: VideoProcessor instance with loaded video
+            sample_interval: Seconds between samples
+            max_samples: Maximum number of samples (None for all)
+            debug_dir: Optional directory to save debug frames (auto-saves first/middle/last)
+            workers: Number of worker threads (default 4)
+
+        Returns:
+            List of dictionaries with {video_time, period, game_time}
+        """
+        timestamps = []
+
+        try:
+            duration = video_processor.duration
+
+            # Calculate all sample times
+            sample_times = []
+            current_time = 0.0
+            while current_time < duration:
+                sample_times.append(current_time)
+                current_time += sample_interval
+                if max_samples and len(sample_times) >= max_samples:
+                    break
+
+            total_samples = len(sample_times)
+
+            # Determine which samples to save as debug frames
+            debug_sample_indices = set()
+            if total_samples > 0:
+                debug_sample_indices = {
+                    0,                          # First sample
+                    total_samples // 2,         # Middle sample
+                    total_samples - 1           # Last sample
+                }
+
+            logger.info(f"Starting parallel OCR sampling with {workers} workers")
+            logger.debug(f"Total samples to process: {total_samples}")
+
+            # Create progress bar
+            progress_bar = tqdm(
+                total=total_samples,
+                desc=f"OCR Sampling ({workers} workers)",
+                unit="frame",
+                ncols=100
+            )
+
+            # Process frames in parallel
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                # Submit all tasks
+                future_to_sample = {}
+                for idx, sample_time in enumerate(sample_times):
+                    save_debug = debug_dir is not None and idx in debug_sample_indices
+                    future = executor.submit(
+                        self._extract_time_at_sample,
+                        video_processor,
+                        sample_time,
+                        idx,
+                        save_debug,
+                        debug_dir
+                    )
+                    future_to_sample[future] = (idx, sample_time)
+
+                # Collect results as they complete
+                for future in as_completed(future_to_sample):
+                    idx, sample_time = future_to_sample[future]
+
+                    try:
+                        result = future.result()
+                        if result:
+                            timestamps.append(result)
+                            period, game_time = result['period'], result['game_time']
+                            progress_bar.set_postfix({'latest': f"P{period} {game_time}"})
+                        else:
+                            progress_bar.set_postfix({'status': 'no_data'})
+
+                    except Exception as exc:
+                        logger.warning(f"Sample at {sample_time:.1f}s failed: {exc}")
+                        progress_bar.set_postfix({'status': 'error'})
+
+                    # Update progress bar
+                    progress_bar.update(1)
+
+            # Close progress bar
+            progress_bar.close()
+
+            # Sort timestamps by video_time
+            timestamps.sort(key=lambda t: t['video_time'])
+
+            logger.info(f"Sampled {len(timestamps)} timestamps from video (parallel)")
+            if debug_dir and debug_sample_indices:
+                logger.info(f"Debug frames saved to: {debug_dir}")
+
+            return timestamps
+
+        except Exception as e:
+            logger.error(f"Failed to sample video times (parallel): {e}")
+            return []
+
+    def _extract_time_at_sample(
+        self,
+        video_processor,
+        sample_time: float,
+        sample_idx: int,
+        save_debug: bool,
+        debug_dir: Optional[Path]
+    ) -> Optional[Dict]:
+        """
+        Helper method to extract time at a specific sample position (thread-safe)
+
+        Args:
+            video_processor: VideoProcessor instance
+            sample_time: Time in video to sample
+            sample_idx: Index of this sample
+            save_debug: Whether to save debug frame
+            debug_dir: Directory for debug frames
+
+        Returns:
+            Dictionary with timestamp data or None if extraction failed
+        """
+        try:
+            # Get frame at current time
+            frame = video_processor.get_frame_at_time(sample_time)
+
+            if frame is None:
+                return None
+
+            # Save debug frame if requested
+            if save_debug and debug_dir:
+                roi = self.scoreboard_roi or self.detect_scoreboard_roi(frame)
+                debug_path = debug_dir / f"debug_ocr_frame_{sample_idx:04d}_{sample_time:.1f}s.jpg"
+                self.save_debug_frame(frame, debug_path, roi)
+                logger.debug(f"Saved debug frame: {debug_path}")
+
+            # Extract time from frame
+            result = self.extract_time_from_frame(frame)
+
+            if result:
+                period, game_time = result
+                return {
+                    'video_time': sample_time,
+                    'period': period,
+                    'game_time': game_time,
+                    'game_time_seconds': self._time_to_seconds(game_time)
+                }
+
+            return None
+
+        except Exception as e:
+            logger.debug(f"Failed to extract time at {sample_time:.1f}s: {e}")
+            return None
 
     def _time_to_seconds(self, time_str: str) -> int:
         """
