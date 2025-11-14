@@ -241,8 +241,9 @@ class HighlightPipeline:
         logger.info("STEP 2: FETCHING BOX SCORE")
         logger.info("=" * 70)
 
-        # Initialize fetcher with cache dir
-        self.box_score_fetcher = BoxScoreFetcher(cache_dir=self.game_folders['data_dir'])
+        # Initialize fetcher with cache dir (only if not already provided for testing)
+        if not hasattr(self.box_score_fetcher, 'find_game'):
+            self.box_score_fetcher = BoxScoreFetcher(cache_dir=self.game_folders['data_dir'])
 
         # Find game ID
         game_id = self.box_score_fetcher.find_game(
@@ -499,7 +500,7 @@ class HighlightPipeline:
         """Create PipelineResult from pipeline state"""
         valid_events = [e for e in self.matched_events if e.get('video_time') is not None]
 
-        total_time = time.time() - self._pipeline_start_time if self._pipeline_start_time else 0.0
+        total_time = time.time() - self._pipeline_start_time if self._pipeline_start_time is not None else 0.0
 
         return PipelineResult(
             success=success,
