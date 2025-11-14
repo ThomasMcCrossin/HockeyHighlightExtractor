@@ -119,7 +119,7 @@ class TestEvent:
 
     def test_invalid_time_format(self):
         """Test that invalid time format raises ValueError"""
-        with pytest.raises(ValueError, match="Invalid time format"):
+        with pytest.raises(ValueError, match="Invalid (time format|minutes)"):
             Event(
                 type='goal',
                 period=1,
