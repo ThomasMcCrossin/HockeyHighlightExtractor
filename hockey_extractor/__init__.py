@@ -36,6 +36,13 @@ from .time_utils import (
 # Pipeline
 from .pipeline import HighlightPipeline
 
+# Amherst Display Integration
+from .amherst_integration import (
+    AmherstBoxScoreProvider,
+    PreloadedBoxScoreFetcher,
+    find_amherst_display_path,
+)
+
 __all__ = [
     # Core processors
     'VideoProcessor',
@@ -63,4 +70,8 @@ __all__ = [
     'parse_period_string',
     'PERIOD_LENGTH_MINUTES',
     'PERIOD_LENGTH_SECONDS',
+    # Amherst Display Integration
+    'AmherstBoxScoreProvider',
+    'PreloadedBoxScoreFetcher',
+    'find_amherst_display_path',
 ]
