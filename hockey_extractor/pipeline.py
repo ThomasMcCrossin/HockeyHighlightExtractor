@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional, Dict, List
 
 from .models import GameInfo, Event, VideoTimestamp, PipelineResult
+from .goal import Goal, GoalSummary
 from .file_manager import FileManager
 from .box_score import BoxScoreFetcher
 from .video_processor import VideoProcessor
@@ -74,9 +75,29 @@ class HighlightPipeline:
         self.matched_events: List[Dict] = []
         self.created_clips: List = []
 
+        # Typed goal data (new in v2.1)
+        self._goals: List[Goal] = []
+        self._matched_goals: List[Goal] = []
+        self._goal_summary: Optional[GoalSummary] = None
+
         # Performance tracking
         self._step_timings: Dict[str, float] = {}
         self._pipeline_start_time: Optional[float] = None
+
+    @property
+    def goals(self) -> List[Goal]:
+        """Get typed Goal objects from box score"""
+        return self._goals
+
+    @property
+    def matched_goals(self) -> List[Goal]:
+        """Get matched Goal objects with video timestamps"""
+        return self._matched_goals
+
+    @property
+    def goal_summary(self) -> Optional[GoalSummary]:
+        """Get GoalSummary with team context"""
+        return self._goal_summary
 
     def execute(
         self,
@@ -270,14 +291,22 @@ class HighlightPipeline:
         if not self.box_score:
             raise ValueError("Failed to fetch box score from API")
 
-        # Extract events
+        # Extract events (dictionary format for backward compatibility)
         self.events = self.box_score_fetcher.extract_events(self.box_score)
+
+        # Also extract typed Goal objects (new in v2.1)
+        self._goals = self.box_score_fetcher.get_goals(self.box_score)
+        self._goal_summary = self.box_score_fetcher.get_goal_summary(
+            self.box_score,
+            self.game_info.home_team,
+            self.game_info.away_team
+        )
 
         if not self.events:
             logger.warning("⚠️  No events found in box score")
             logger.info("   This might be a scoreless game or data issue")
 
-        logger.info(f"✅ Found {len(self.events)} events")
+        logger.info(f"✅ Found {len(self.events)} events ({len(self._goals)} goals)")
         for event in self.events[:5]:  # Show first 5
             logger.info(f"   - P{event['period']} {event['time']}: {event['type'].upper()}")
         if len(self.events) > 5:
@@ -368,12 +397,20 @@ class HighlightPipeline:
             self.video_processor.duration
         )
 
-        # Match events
+        # Match events (dictionary format for backward compatibility)
         self.matched_events = self.event_matcher.match_events_to_video(
             self.events,
             self.video_timestamps,
             tolerance_seconds=tolerance_seconds
         )
+
+        # Also match typed Goal objects (new in v2.1)
+        if self._goals:
+            self._matched_goals = self.event_matcher.match_goals_to_video(
+                self._goals,
+                self.video_timestamps,
+                tolerance_seconds=tolerance_seconds
+            )
 
         # Filter to only events with successful matches
         valid_events = [e for e in self.matched_events if e.get('video_time') is not None]

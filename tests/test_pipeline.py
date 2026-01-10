@@ -113,6 +113,9 @@ class TestHighlightPipeline:
         mock_fetcher.extract_events.return_value = [
             {'type': 'goal', 'period': 1, 'time': '10:00', 'team': 'Team1'}
         ]
+        # New Goal-related methods
+        mock_fetcher.get_goals.return_value = []
+        mock_fetcher.get_goal_summary.return_value = Mock(home_team='Team1', away_team='Team2', goals=[])
 
         # Mock FileManager
         mock_file_manager = Mock()
@@ -234,11 +237,21 @@ class TestHighlightPipeline:
         assert len(result.warnings) == 1
         assert result.total_duration_seconds > 0
 
-    def test_execute_integration_mock(self):
+    def test_execute_integration_mock(self, tmp_path):
         """Integration test: Execute full pipeline with mocks"""
         mock_config = Mock()
         mock_config.MAX_HIGHLIGHT_CLIPS = 10
         video_path = Path('/fake/2025-01-15 Team1 vs Team2 Home 7.00pm.mp4')
+
+        # Create real temp directories for file operations
+        game_dir = tmp_path / 'game'
+        clips_dir = game_dir / 'clips'
+        output_dir = game_dir / 'output'
+        data_dir = game_dir / 'data'
+        logs_dir = game_dir / 'logs'
+        source_dir = game_dir / 'source'
+        for d in [game_dir, clips_dir, output_dir, data_dir, logs_dir, source_dir]:
+            d.mkdir(parents=True, exist_ok=True)
 
         # Mock FileManager
         mock_file_manager = Mock()
@@ -252,12 +265,12 @@ class TestHighlightPipeline:
             'time': '7.00pm'
         }
         mock_file_manager.create_game_folder.return_value = {
-            'game_dir': Path('/output/game'),
-            'clips_dir': Path('/output/game/clips'),
-            'output_dir': Path('/output/game/output'),
-            'data_dir': Path('/output/game/data'),
-            'logs_dir': Path('/output/game/logs'),
-            'source_dir': Path('/output/game/source')
+            'game_dir': game_dir,
+            'clips_dir': clips_dir,
+            'output_dir': output_dir,
+            'data_dir': data_dir,
+            'logs_dir': logs_dir,
+            'source_dir': source_dir
         }
         mock_file_manager.save_game_metadata = Mock()
         mock_file_manager.save_events = Mock()
@@ -269,6 +282,9 @@ class TestHighlightPipeline:
         mock_fetcher.extract_events.return_value = [
             {'type': 'goal', 'period': 1, 'time': '10:00', 'team': 'Team1', 'scorer': 'Player1'}
         ]
+        # New Goal-related methods
+        mock_fetcher.get_goals.return_value = []
+        mock_fetcher.get_goal_summary.return_value = Mock(home_team='Team1', away_team='Team2', goals=[])
 
         # Mock VideoProcessor
         mock_video = Mock()
