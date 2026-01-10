@@ -326,8 +326,8 @@ class BoxScoreFetcher:
                 except Exception as e:
                     logger.warning(f"Failed to parse penalty: {e}")
 
-            # Sort events by period and time
-            events.sort(key=lambda e: (e['period'], self._time_to_seconds(e['time'])))
+            # Sort events by period and time (descending time since hockey clocks count down)
+            events.sort(key=lambda e: (e['period'], -self._time_to_seconds(e['time'])))
 
             logger.info(f"Extracted {len(events)} events from box score")
 
