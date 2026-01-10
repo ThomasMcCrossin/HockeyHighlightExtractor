@@ -1,10 +1,24 @@
 """
 Event Matcher - Syncs box score events with video timestamps using OCR data
+
+This module matches events from box scores (goals, penalties) to their
+corresponding timestamps in the video using OCR-extracted time data.
 """
 
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 import numpy as np
+
+from .goal import Goal
+from .time_utils import (
+    time_string_to_seconds,
+    period_time_to_absolute_seconds,
+    seconds_to_time_string,
+    PERIOD_LENGTH_MINUTES,
+    PERIOD_LENGTH_SECONDS,
+    OT_LENGTH_MINUTES,
+    OT_LENGTH_SECONDS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -12,9 +26,9 @@ logger = logging.getLogger(__name__)
 class EventMatcher:
     """Matches box score events to video timestamps"""
 
-    # Hockey period lengths (minutes)
-    PERIOD_LENGTH = 20  # Regular periods
-    OT_LENGTH = 20      # Overtime (can vary)
+    # Hockey period lengths (using centralized constants)
+    PERIOD_LENGTH = PERIOD_LENGTH_MINUTES
+    OT_LENGTH = OT_LENGTH_MINUTES
 
     def __init__(self, config=None):
         """
@@ -308,24 +322,7 @@ class EventMatcher:
         Returns:
             Absolute game time in seconds
         """
-        # Calculate time elapsed in previous periods
-        if period == 1:
-            previous_periods_time = 0
-        elif period == 2:
-            previous_periods_time = self.PERIOD_LENGTH * 60
-        elif period == 3:
-            previous_periods_time = self.PERIOD_LENGTH * 60 * 2
-        else:  # OT (period 4+)
-            previous_periods_time = self.PERIOD_LENGTH * 60 * 3
-            # Add any additional OT periods
-            if period > 4:
-                previous_periods_time += (period - 4) * self.OT_LENGTH * 60
-
-        # Hockey clocks count DOWN, so we need to invert
-        # Time remaining = period_length - time_elapsed
-        time_elapsed = (self.PERIOD_LENGTH * 60) - time_seconds
-
-        return previous_periods_time + time_elapsed
+        return period_time_to_absolute_seconds(period, time_seconds)
 
     def _time_to_seconds(self, time_str: str) -> int:
         """
@@ -337,16 +334,73 @@ class EventMatcher:
         Returns:
             Time in seconds
         """
-        try:
-            parts = time_str.split(':')
-            if len(parts) == 2:
-                minutes = int(parts[0])
-                seconds = int(parts[1])
-                return minutes * 60 + seconds
-        except (ValueError, AttributeError):
-            pass
+        return time_string_to_seconds(time_str)
 
-        return 0
+    def match_goals_to_video(
+        self,
+        goals: List[Goal],
+        video_timestamps: List[Dict],
+        tolerance_seconds: int = 30
+    ) -> List[Goal]:
+        """
+        Match Goal objects to video timestamps.
+
+        This is the preferred method for type-safe goal matching.
+
+        Args:
+            goals: List of Goal objects
+            video_timestamps: List of video timestamp dictionaries
+            tolerance_seconds: Maximum time difference for matching
+
+        Returns:
+            List of Goal objects with video_time and match_confidence set
+        """
+        matched_goals = []
+
+        if not video_timestamps:
+            logger.warning("No video timestamps available for matching")
+            return goals
+
+        logger.info(f"Matching {len(goals)} goals to {len(video_timestamps)} video timestamps")
+
+        for goal in goals:
+            try:
+                # Create event dict for matching using existing logic
+                event_dict = {
+                    'type': 'goal',
+                    'period': goal.period,
+                    'time': goal.time,
+                    'team': goal.team,
+                }
+
+                # Find closest video timestamp
+                match_result = self._find_closest_timestamp_with_confidence(
+                    event_dict,
+                    video_timestamps,
+                    tolerance_seconds
+                )
+
+                if match_result is not None:
+                    video_time, confidence, time_diff = match_result
+                    matched_goal = goal.with_video_time(video_time, confidence)
+                    matched_goals.append(matched_goal)
+
+                    logger.debug(
+                        f"Matched {goal} to video time {video_time:.1f}s "
+                        f"(confidence: {confidence:.2f}, diff: {time_diff:.1f}s)"
+                    )
+                else:
+                    logger.warning(f"Could not match goal: {goal}")
+                    matched_goals.append(goal)
+
+            except Exception as e:
+                logger.error(f"Error matching goal: {e}")
+                matched_goals.append(goal)
+
+        successful = sum(1 for g in matched_goals if g.is_matched)
+        logger.info(f"Successfully matched {successful}/{len(goals)} goals")
+
+        return matched_goals
 
     def filter_events_by_type(
         self,

@@ -1,5 +1,8 @@
 """
 Box Score Fetcher - Integrates with HockeyTech API to fetch game data
+
+This module handles API communication with HockeyTech to retrieve box scores.
+For parsing box score data, see box_score_parser.py.
 """
 
 import logging
@@ -10,6 +13,10 @@ import requests
 from requests.adapters import HTTPAdapter, Retry
 from pathlib import Path
 import json
+
+from .box_score_parser import BoxScoreParser
+from .goal import Goal, GoalSummary
+from .time_utils import time_string_to_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +54,9 @@ class BoxScoreFetcher:
 
         # Create session with retry logic
         self.session = self._create_session_with_retries()
+
+        # Parser for extracting goals from box scores
+        self.parser = BoxScoreParser()
 
     def _create_session_with_retries(self) -> requests.Session:
         """
@@ -359,16 +369,57 @@ class BoxScoreFetcher:
         Returns:
             Time in seconds
         """
-        try:
-            parts = time_str.split(':')
-            if len(parts) == 2:
-                minutes = int(parts[0])
-                seconds = int(parts[1])
-                return minutes * 60 + seconds
-        except (ValueError, AttributeError):
-            pass
+        return time_string_to_seconds(time_str)
 
-        return 0
+    def get_goals(self, box_score: Dict) -> List[Goal]:
+        """
+        Extract typed Goal objects from box score.
+
+        This is the preferred method for goal extraction, providing
+        type-safe Goal objects with validation.
+
+        Args:
+            box_score: Box score dictionary from API
+
+        Returns:
+            List of Goal objects
+        """
+        return self.parser.parse_goals(box_score)
+
+    def get_goal_summary(
+        self,
+        box_score: Dict,
+        home_team: str,
+        away_team: str
+    ) -> GoalSummary:
+        """
+        Extract goals with team context as a GoalSummary.
+
+        Args:
+            box_score: Box score dictionary from API
+            home_team: Home team name
+            away_team: Away team name
+
+        Returns:
+            GoalSummary with all goals and team information
+        """
+        return self.parser.parse_goal_summary(box_score, home_team, away_team)
+
+    def get_goals_as_events(self, box_score: Dict) -> List[Dict]:
+        """
+        Extract goals as event dictionaries for backward compatibility.
+
+        This method returns goals in the same format as extract_events()
+        but using the new typed parsing internally.
+
+        Args:
+            box_score: Box score dictionary from API
+
+        Returns:
+            List of event dictionaries compatible with EventMatcher
+        """
+        goals = self.get_goals(box_score)
+        return self.parser.goals_to_event_dicts(goals)
 
     def get_cached_box_scores(self) -> List[Path]:
         """
