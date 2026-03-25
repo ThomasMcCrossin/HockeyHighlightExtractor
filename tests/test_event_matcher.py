@@ -97,8 +97,8 @@ class TestEventMatcher:
             {
                 'video_time': 2000.0,
                 'period': 2,
-                'game_time': '15:00',
-                'game_time_seconds': 900
+                'game_time': '5:00',
+                'game_time_seconds': 300
             },
         ]
 
@@ -109,11 +109,12 @@ class TestEventMatcher:
         )
 
         assert result is not None
-        video_time, confidence, time_diff = result
+        video_time, confidence, time_diff, match_method = result
 
         assert video_time == 2000.0
         assert confidence == 1.0  # Exact match
         assert time_diff == 0
+        assert match_method == 'exact_period'
 
     def test_find_closest_timestamp_with_confidence_near_match(self):
         """Test finding closest timestamp with near match"""
@@ -128,8 +129,8 @@ class TestEventMatcher:
             {
                 'video_time': 2000.0,
                 'period': 2,
-                'game_time': '14:50',  # 890 seconds, 10 second diff
-                'game_time_seconds': 890
+                'game_time': '5:10',
+                'game_time_seconds': 310
             },
         ]
 
@@ -140,11 +141,12 @@ class TestEventMatcher:
         )
 
         assert result is not None
-        video_time, confidence, time_diff = result
+        video_time, confidence, time_diff, match_method = result
 
         assert video_time == 2000.0
         assert 0.6 < confidence < 0.7  # Reduced confidence for 10s diff with 30s tolerance
         assert time_diff == 10
+        assert match_method == 'exact_period'
 
     def test_find_closest_timestamp_no_match(self):
         """Test finding timestamp when no match within tolerance"""
@@ -208,8 +210,17 @@ class TestEventMatchingIntegration:
         ]
 
         video_timestamps = [
-            {'video_time': 300.0, 'period': 1, 'game_time': '15:00', 'game_time_seconds': 900},
-            {'video_time': 1500.0, 'period': 2, 'game_time': '10:00', 'game_time_seconds': 600},
+            {'video_time': 0.0, 'period': 1, 'game_time': '20:00', 'game_time_seconds': 1200},
+            {'video_time': 120.0, 'period': 1, 'game_time': '18:00', 'game_time_seconds': 1080},
+            {'video_time': 240.0, 'period': 1, 'game_time': '16:00', 'game_time_seconds': 960},
+            {'video_time': 360.0, 'period': 1, 'game_time': '14:00', 'game_time_seconds': 840},
+            {'video_time': 480.0, 'period': 1, 'game_time': '12:00', 'game_time_seconds': 720},
+            {'video_time': 600.0, 'period': 1, 'game_time': '10:00', 'game_time_seconds': 600},
+            {'video_time': 720.0, 'period': 1, 'game_time': '8:00', 'game_time_seconds': 480},
+            {'video_time': 840.0, 'period': 1, 'game_time': '6:00', 'game_time_seconds': 360},
+            {'video_time': 900.0, 'period': 1, 'game_time': '5:00', 'game_time_seconds': 300},
+            {'video_time': 1800.0, 'period': 2, 'game_time': '20:00', 'game_time_seconds': 1200},
+            {'video_time': 2400.0, 'period': 2, 'game_time': '10:00', 'game_time_seconds': 600},
         ]
 
         matched_events = self.matcher.match_events_to_video(

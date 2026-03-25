@@ -93,8 +93,9 @@ class TestPeriodTimeToAbsoluteSeconds:
 
     def test_overtime(self):
         """Test overtime conversions"""
-        # OT (P4), 15:00 remaining = 60 (3 periods) + 5 min = 65 min = 3900 seconds
-        assert period_time_to_absolute_seconds(4, 15 * 60) == 3900
+        # OT is a 5-minute period in this implementation.
+        assert period_time_to_absolute_seconds(4, 5 * 60) == 3600
+        assert period_time_to_absolute_seconds(4, 0) == 3900
 
 
 class TestAbsoluteSecondsToPeriodTime:

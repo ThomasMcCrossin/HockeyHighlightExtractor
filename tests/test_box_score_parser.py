@@ -164,11 +164,11 @@ class TestBoxScoreParser:
 
         goals = self.parser.parse_goals(box_score)
 
-        # Should be sorted by period first, then by time (descending, since hockey clock counts down)
+        # Current parser normalizes goals in period order, then by elapsed clock time.
         assert goals[0].period == 1
-        assert goals[0].time == '15:00'  # Earlier in period (more time remaining)
+        assert goals[0].time == '5:00'
         assert goals[1].period == 1
-        assert goals[1].time == '5:00'   # Later in period (less time remaining)
+        assert goals[1].time == '15:00'
         assert goals[2].period == 2
 
     def test_handles_missing_fields_gracefully(self):

@@ -4,6 +4,7 @@ Unit tests for HighlightPipeline
 
 import pytest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, MagicMock, patch
 from hockey_extractor.pipeline import HighlightPipeline
 from hockey_extractor.models import GameInfo, PipelineResult
@@ -239,8 +240,7 @@ class TestHighlightPipeline:
 
     def test_execute_integration_mock(self, tmp_path):
         """Integration test: Execute full pipeline with mocks"""
-        mock_config = Mock()
-        mock_config.MAX_HIGHLIGHT_CLIPS = 10
+        mock_config = SimpleNamespace(MAX_HIGHLIGHT_CLIPS=10)
         video_path = Path('/fake/2025-01-15 Team1 vs Team2 Home 7.00pm.mp4')
 
         # Create real temp directories for file operations
@@ -302,6 +302,7 @@ class TestHighlightPipeline:
         mock_ocr.sample_video_times.return_value = [
             {'video_time': 500.0, 'period': 1, 'game_time': '10:00', 'game_time_seconds': 600}
         ]
+        mock_ocr.get_last_sampling_stats.return_value = None
 
         # Mock EventMatcher
         mock_matcher = Mock()
@@ -352,7 +353,7 @@ class TestHighlightPipeline:
         )
 
         # Execute
-        result = pipeline.execute()
+        result = pipeline.execute(auto_detect_start=False, parallel_ocr=False)
 
         # Verify
         assert result.success is True

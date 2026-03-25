@@ -76,7 +76,15 @@ sudo apt-get install tesseract-ocr
 pip install -r requirements.txt
 ```
 
-### 2. Configure Paths
+### 2. Configure HockeyTech Access
+
+Set `HOCKEYTECH_API_KEY` in your shell before running the extractor:
+
+```bash
+export HOCKEYTECH_API_KEY=your_key_here
+```
+
+### 3. Configure Paths
 
 Edit `config.py` to set your directories:
 
@@ -85,7 +93,7 @@ GAMES_DIR = LOCAL_REPO_DIR / "Games"   # Where outputs are saved
 TEAMS_FILE = LOCAL_REPO_DIR / "teams.json"  # Team data
 ```
 
-### 3. Run the Extractor
+### 4. Run the Extractor
 
 **Interactive Mode** (select video from list):
 ```bash
