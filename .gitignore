@@ -227,3 +227,12 @@ processing_log.txt
 temp_hockey_log.txt
 outputlast.txt
 hockey_highlight_extractor.py  # Old monolithic file (replaced by modular structure)
+
+# Local credentials, machine metadata, and generated platform files
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*.json
+*service-account*.json
+*.Zone.Identifier
