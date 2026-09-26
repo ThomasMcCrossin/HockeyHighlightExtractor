@@ -32,11 +32,17 @@ Automatically extract hockey game highlights by matching official box score even
   separate boxes, which are cropped and stitched before OCR, so stacked bugs ("13:03" over "1st")
   read like one-line banners.
 - **Per-recording detection**: `scorebug_detect.py` picks the layout before the OCR pass. Every
-  known layout reads a few frames (each only parses its own bug), and if the vote is weak an
+  known layout reads a few frames (each only parses its own bug), and if the vote is weak or close an
   OpenAI-compatible vision model can pick from reference crops in `assets/scorebugs/`
   (`SCOREBUG_VISION_API_KEY` or `DEEPSEEK_API_KEY`; optional).
 - **Adding a layout**: one `SCOREBUG_BOX_LAYOUTS` entry, one profile, and a crop in
   `tests/fixtures/scorebugs/` so `tests/test_scorebug_layouts.py` guards it.
+- **Partial recordings**: a recording can join mid-game or end early. Periods start from what the
+  bug shows, and goals outside the recording are reported as unmatched instead of clipped at its edge.
+- **Frozen scorebugs**: operator-driven bugs can stop (clock and score) for minutes of play. A clock
+  that is then jumped ahead is accepted when the next readings agree, and goals the clock can't
+  time are placed by `goal_locator.py` from the broadcast's goal celebration, using the same optional
+  vision model (`GOAL_VISION_LOCATOR = False` in `config.py` disables it).
 - **Shootouts**: games that end in a shootout get one clip from the end of overtime through the
   shootout, found from the scorebug rather than the (lagging) game status.
 
