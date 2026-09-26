@@ -25,6 +25,21 @@ Automatically extract hockey game highlights by matching official box score even
 
 ---
 
+## 🆕 Scorebug layouts (2026-27 sync)
+
+- **Layout catalog**: `scorebug_profiles.py` lists known broadcast scorebugs. Box layouts in
+  `hockey_extractor/ocr_engine.py` (`SCOREBUG_BOX_LAYOUTS`) describe the period and clock as
+  separate boxes, which are cropped and stitched before OCR, so stacked bugs ("13:03" over "1st")
+  read like one-line banners.
+- **Per-recording detection**: `scorebug_detect.py` picks the layout before the OCR pass. Every
+  known layout reads a few frames (each only parses its own bug), and if the vote is weak an
+  OpenAI-compatible vision model can pick from reference crops in `assets/scorebugs/`
+  (`SCOREBUG_VISION_API_KEY` or `DEEPSEEK_API_KEY`; optional).
+- **Adding a layout**: one `SCOREBUG_BOX_LAYOUTS` entry, one profile, and a crop in
+  `tests/fixtures/scorebugs/` so `tests/test_scorebug_layouts.py` guards it.
+- **Shootouts**: games that end in a shootout get one clip from the end of overtime through the
+  shootout, found from the scorebug rather than the (lagging) game status.
+
 ## 🎯 Features
 
 - **Automatic box score fetching** via HockeyTech API (MHL & BSHL)

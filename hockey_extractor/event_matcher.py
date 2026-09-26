@@ -15,6 +15,9 @@ import numpy as np
 
 from .goal import Goal
 from .time_utils import (
+    game_clock_rules_from_context,
+    absolute_seconds_to_period_time,
+    period_length_seconds,
     time_string_to_seconds,
     period_time_to_absolute_seconds,
     seconds_to_time_string,
@@ -674,6 +677,20 @@ class EventMatcher:
         """
         self.config = config
         self.scoreboard_health: Optional[ScoreboardHealth] = None
+        self.clock_rules = game_clock_rules_from_context()
+
+    def set_game_context(self, game_context: Optional[Dict] = None) -> None:
+        """Install game-specific clock rules (playoff vs regular season OT)."""
+        self.clock_rules = game_clock_rules_from_context(game_context)
+
+    def _period_length_seconds(self, period: int) -> int:
+        return period_length_seconds(period, self.clock_rules)
+
+    def _period_time_to_absolute_seconds(self, period: int, time_seconds: int) -> int:
+        return period_time_to_absolute_seconds(period, time_seconds, self.clock_rules)
+
+    def _absolute_seconds_to_period_time(self, absolute_seconds: int) -> Tuple[int, int]:
+        return absolute_seconds_to_period_time(absolute_seconds, self.clock_rules)
 
     def assess_scoreboard_health(
         self,
@@ -700,7 +717,7 @@ class EventMatcher:
         # Count period detection
         for ts in video_timestamps:
             period = ts.get("period")
-            if period is not None and period != 0 and 1 <= period <= 5:
+            if period is not None and period != 0 and int(period) >= 1:
                 health.samples_with_period += 1
             else:
                 health.samples_period_unknown += 1
@@ -755,6 +772,7 @@ class EventMatcher:
         tolerance_seconds: int = 30,
         game_id: str = "unknown",
         output_dir: Optional[Path] = None,
+        recording_game_start_time: Optional[float] = None,
     ) -> List[Dict]:
         """
         Match box score events to video timestamps
@@ -867,7 +885,8 @@ class EventMatcher:
                 match_result = self._find_closest_timestamp_with_confidence(
                     event,
                     normalized_timestamps,
-                    tolerance_seconds
+                    tolerance_seconds,
+                    recording_game_start_time=recording_game_start_time,
                 )
 
                 if match_result is not None:
@@ -964,7 +983,9 @@ class EventMatcher:
         self,
         event: Dict,
         video_timestamps: List[Dict],
-        tolerance_seconds: int
+        tolerance_seconds: int,
+        *,
+        recording_game_start_time: Optional[float] = None,
     ) -> Optional[float]:
         """
         Find the closest video timestamp for a box score event
@@ -989,9 +1010,23 @@ class EventMatcher:
             if ts.get('period') == event_period
         ]
 
+        minimum_video_time = self.minimum_video_time_for_event(
+            event,
+            recording_game_start_time=recording_game_start_time,
+        )
+        if minimum_video_time is not None:
+            period_timestamps = [
+                ts for ts in period_timestamps
+                if float(ts.get("video_time", -1.0) or -1.0) >= minimum_video_time
+            ]
+
         if not period_timestamps:
             # Try interpolation if we have timestamps before and after this period
-            return self._interpolate_timestamp(event, video_timestamps)
+            return self._interpolate_timestamp(
+                event,
+                video_timestamps,
+                recording_game_start_time=recording_game_start_time,
+            )
 
         # Find timestamp with closest game time
         best_match = None
@@ -1013,13 +1048,19 @@ class EventMatcher:
             return best_match['video_time']
 
         # If exact period match failed, try interpolation
-        return self._interpolate_timestamp(event, video_timestamps)
+        return self._interpolate_timestamp(
+            event,
+            video_timestamps,
+            recording_game_start_time=recording_game_start_time,
+        )
 
     def _find_closest_timestamp_with_confidence(
         self,
         event: Dict,
         video_timestamps: List[Dict],
-        tolerance_seconds: int
+        tolerance_seconds: int,
+        *,
+        recording_game_start_time: Optional[float] = None,
     ) -> Optional[Tuple[float, float, float, str]]:
         """
         Find the closest video timestamp for a box score event with confidence score
@@ -1046,9 +1087,23 @@ class EventMatcher:
             if ts.get('period') == event_period
         ]
 
+        minimum_video_time = self.minimum_video_time_for_event(
+            event,
+            recording_game_start_time=recording_game_start_time,
+        )
+        if minimum_video_time is not None:
+            period_timestamps = [
+                ts for ts in period_timestamps
+                if float(ts.get("video_time", -1.0) or -1.0) >= minimum_video_time
+            ]
+
         if not period_timestamps:
             # Try interpolation if we have timestamps before and after this period
-            video_time = self._interpolate_timestamp(event, video_timestamps)
+            video_time = self._interpolate_timestamp(
+                event,
+                video_timestamps,
+                recording_game_start_time=recording_game_start_time,
+            )
             if video_time is not None:
                 # Lower confidence for interpolated matches
                 return (video_time, 0.5, tolerance_seconds / 2, "interpolation_no_period_match")
@@ -1083,7 +1138,11 @@ class EventMatcher:
             return (video_time, confidence, best_diff, "exact_period")
 
         # If exact period match failed, try interpolation
-        video_time = self._interpolate_timestamp(event, video_timestamps)
+        video_time = self._interpolate_timestamp(
+            event,
+            video_timestamps,
+            recording_game_start_time=recording_game_start_time,
+        )
         if video_time is not None:
             # Very low confidence for interpolated matches outside tolerance
             return (video_time, 0.3, tolerance_seconds, "interpolation_fallback")
@@ -1093,7 +1152,9 @@ class EventMatcher:
     def _interpolate_timestamp(
         self,
         event: Dict,
-        video_timestamps: List[Dict]
+        video_timestamps: List[Dict],
+        *,
+        recording_game_start_time: Optional[float] = None,
     ) -> Optional[float]:
         """
         Interpolate video timestamp when exact period match not found
@@ -1109,6 +1170,10 @@ class EventMatcher:
             event_period = event.get('period')
             event_time = event.get('time', '00:00')
             event_seconds = self._event_time_to_remaining_seconds(event_period, event_time)
+            minimum_video_time = self.minimum_video_time_for_event(
+                event,
+                recording_game_start_time=recording_game_start_time,
+            )
 
             # Convert event to absolute game time (seconds from game start)
             event_game_seconds = self._event_to_absolute_time(event_period, event_seconds)
@@ -1118,6 +1183,8 @@ class EventMatcher:
             after = None
 
             for ts in video_timestamps:
+                if minimum_video_time is not None and float(ts.get("video_time", -1.0) or -1.0) < minimum_video_time:
+                    continue
                 ts_game_seconds = self._event_to_absolute_time(
                     ts['period'],
                     ts['game_time_seconds']
@@ -1179,7 +1246,7 @@ class EventMatcher:
         Returns:
             Absolute game time in seconds
         """
-        return period_time_to_absolute_seconds(period, time_seconds)
+        return self._period_time_to_absolute_seconds(period, time_seconds)
 
     def _event_time_to_remaining_seconds(self, period: Optional[int], time_str: str) -> int:
         """
@@ -1192,7 +1259,7 @@ class EventMatcher:
 
         # Default to True to match config.py default (box scores use elapsed time)
         if getattr(self.config, 'BOX_SCORE_TIME_IS_ELAPSED', True):
-            period_length = OT_LENGTH_SECONDS if period_num >= 4 else PERIOD_LENGTH_SECONDS
+            period_length = self._period_length_seconds(period_num)
             event_seconds = max(0, min(event_seconds, period_length))
             return max(0, period_length - event_seconds)
 
@@ -1201,6 +1268,49 @@ class EventMatcher:
     def event_time_to_remaining_seconds(self, period: Optional[int], time_str: str) -> int:
         """Public wrapper for event time → remaining seconds conversion."""
         return self._event_time_to_remaining_seconds(period, time_str)
+
+    def minimum_video_time_for_event(
+        self,
+        event: Dict,
+        *,
+        recording_game_start_time: Optional[float] = None,
+    ) -> Optional[float]:
+        """
+        Return the earliest plausible video timestamp for an event.
+
+        For recorded full-game inputs, a goal at P1 15:21 cannot happen before
+        15:21 of *game elapsed* time after puck drop. This guard rejects warmup
+        samples that happen to show the same period/clock later used in-game.
+        """
+        if recording_game_start_time is None:
+            return None
+        if not bool(getattr(self.config, "EVENT_ENFORCE_MIN_VIDEO_TIME_FROM_GAME_START", True)):
+            return None
+
+        try:
+            start_time = float(recording_game_start_time)
+        except Exception:
+            return None
+
+        try:
+            period = int(event.get("period") or 1)
+        except Exception:
+            period = 1
+        time_str = str(event.get("time") or "0:00")
+
+        try:
+            remaining_seconds = self._event_time_to_remaining_seconds(period, time_str)
+            absolute_game_seconds = float(self._event_to_absolute_time(period, remaining_seconds))
+        except Exception:
+            return None
+
+        try:
+            buffer_seconds = float(getattr(self.config, "EVENT_MIN_VIDEO_TIME_BUFFER_SECONDS", 240.0) or 240.0)
+        except Exception:
+            buffer_seconds = 240.0
+        buffer_seconds = max(0.0, buffer_seconds)
+
+        return max(0.0, start_time + absolute_game_seconds - buffer_seconds)
 
     def _time_to_seconds(self, time_str: str) -> int:
         """
@@ -1218,7 +1328,9 @@ class EventMatcher:
         self,
         goals: List[Goal],
         video_timestamps: List[Dict],
-        tolerance_seconds: int = 30
+        tolerance_seconds: int = 30,
+        *,
+        recording_game_start_time: Optional[float] = None,
     ) -> List[Goal]:
         """
         Match Goal objects to video timestamps.
@@ -1262,7 +1374,8 @@ class EventMatcher:
                 match_result = self._find_closest_timestamp_with_confidence(
                     event_dict,
                     normalized_timestamps,
-                    tolerance_seconds
+                    tolerance_seconds,
+                    recording_game_start_time=recording_game_start_time,
                 )
 
                 if match_result is not None:
@@ -1340,7 +1453,7 @@ class EventMatcher:
                 ts_period = int(ts_period_raw) if ts_period_raw is not None else None
             except (TypeError, ValueError):
                 ts_period = None
-            if ts_period is not None and not (1 <= ts_period <= 5):
+            if ts_period is not None and int(ts_period) < 1:
                 ts_period = None
 
             time_remaining = ts.get('game_time_seconds')
@@ -1355,7 +1468,7 @@ class EventMatcher:
 
             # Validate against expected period length (OT is 5:00).
             expected_period = ts_period or current_period
-            period_length = OT_LENGTH_SECONDS if expected_period >= 4 else PERIOD_LENGTH_SECONDS
+            period_length = self._period_length_seconds(expected_period)
             if time_remaining < 0 or time_remaining > period_length:
                 norm_logger.add_entry(NormalizationLogEntry(
                     video_time=video_time,
@@ -1390,7 +1503,7 @@ class EventMatcher:
 
                 # Prefer explicit OCR period jumps when they look plausible.
                 if ts_period is not None and ts_period > current_period:
-                    ts_period_length = OT_LENGTH_SECONDS if ts_period >= 4 else PERIOD_LENGTH_SECONDS
+                    ts_period_length = self._period_length_seconds(ts_period)
                     near_start = time_remaining >= (ts_period_length - 60)
                     near_end_prev = last_time_remaining <= 120
                     if near_start and (near_end_prev or long_gap):
@@ -1407,7 +1520,7 @@ class EventMatcher:
 
                 if last_time_remaining is not None:
                     # Period reset: big jump back up to ~20:00 (or to ~5:00 for OT if inferred).
-                    inferred_period_length = OT_LENGTH_SECONDS if current_period >= 4 else PERIOD_LENGTH_SECONDS
+                    inferred_period_length = self._period_length_seconds(current_period)
                     period_reset_threshold = int(inferred_period_length * 0.75)
 
                     if time_remaining > last_time_remaining + period_reset_threshold:
@@ -1417,7 +1530,7 @@ class EventMatcher:
                             if seen_near_start_in_period or long_gap:
                                 # Legitimate intermission reset.
                                 old_period = current_period
-                                current_period = min(5, current_period + 1)
+                                current_period = current_period + 1
                                 norm_logger.add_period_transition(
                                     video_time, old_period, current_period,
                                     f"Clock reset to ~{time_remaining}s (intermission)"
@@ -1449,7 +1562,7 @@ class EventMatcher:
                         # Allow the 3rd→OT transition even if OCR period isn't trusted:
                         # 0:xx → 4:xx (OT clock) is a legitimate reset but much smaller than a 20:00 reset.
                         if current_period == 3:
-                            near_ot_start = time_remaining >= (OT_LENGTH_SECONDS - 60)
+                            near_ot_start = time_remaining >= (self._period_length_seconds(4) - 60)
                             near_end_prev = last_time_remaining <= 30
                             if near_ot_start and (near_end_prev or long_gap):
                                 old_period = current_period
@@ -1519,7 +1632,7 @@ class EventMatcher:
             last_video_time = video_time
             last_confidence = ts_confidence
             # Update "seen near start" after any period transitions for this sample.
-            period_len_for_current = OT_LENGTH_SECONDS if current_period >= 4 else PERIOD_LENGTH_SECONDS
+            period_len_for_current = self._period_length_seconds(current_period)
             if time_remaining >= (period_len_for_current - 60):
                 seen_near_start_in_period = True
 
