@@ -111,7 +111,7 @@ class TestEvent:
         with pytest.raises(ValueError, match="Invalid period"):
             Event(
                 type='goal',
-                period=10,  # Invalid period
+                period=0,  # Invalid period (multi-OT periods >= 4 are valid)
                 time='10:00',
                 team='Team1',
                 scorer='Player'

@@ -205,7 +205,7 @@ class TestGameTime:
     def test_invalid_period(self):
         """Test that invalid period raises ValueError"""
         with pytest.raises(ValueError, match="Invalid period"):
-            GameTime(period=10, time_remaining='15:00')
+            GameTime(period=0, time_remaining='15:00')
 
     def test_invalid_time_format(self):
         """Test that invalid time format raises ValueError"""

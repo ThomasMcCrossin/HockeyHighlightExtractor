@@ -10,19 +10,25 @@ import shutil
 from pathlib import Path
 
 # ---------- Google Drive detection (no write test, just presence) ----------
-def find_toms_google_drive():
-    """Find tom@curlys.ca Google Drive root for optional mirroring (read-only is fine)."""
+# Set HIGHLIGHT_GOOGLE_ACCOUNT to your Drive account name to also check account-named mounts.
+GOOGLE_ACCOUNT = os.environ.get("HIGHLIGHT_GOOGLE_ACCOUNT", "").strip()
+
+
+def find_google_drive():
+    """Find a Google Drive root for optional mirroring (read-only is fine)."""
     possible_drives = ['G:', 'J:', 'C:', 'D:', 'E:', 'F:', 'H:', 'I:', 'K:']
-    print("🔍 Looking for tom@curlys.ca Google Drive (for optional mirroring).")
+    print("🔍 Looking for a Google Drive (for optional mirroring).")
     for drive in possible_drives:
         for path in [
             Path(f"{drive}/My Drive"),
             Path(f"{drive}/Google Drive"),
             Path(f"{drive}/GoogleDrive"),
             Path(f"{drive}/Drive"),
-            Path(f"{drive}/tom@curlys.ca/My Drive"),
-            Path(f"{drive}/GoogleDrive - tom@curlys.ca"),
-            Path(f"{drive}/My Drive - tom@curlys.ca"),
+            *([
+                Path(f"{drive}/{GOOGLE_ACCOUNT}/My Drive"),
+                Path(f"{drive}/GoogleDrive - {GOOGLE_ACCOUNT}"),
+                Path(f"{drive}/My Drive - {GOOGLE_ACCOUNT}"),
+            ] if GOOGLE_ACCOUNT else []),
         ]:
             projects_folder = path / "Projects"
             if projects_folder.exists():
@@ -36,7 +42,7 @@ LOCAL_REPO_DIR = Path(__file__).parent
 print(f"📁 Local Repository: {LOCAL_REPO_DIR}")
 
 # ---------- Optional Google Drive locations (for MIRRORING only) ----------
-GOOGLE_DRIVE = find_toms_google_drive()
+GOOGLE_DRIVE = find_google_drive()
 if GOOGLE_DRIVE:
     GOOGLE_HOCKEY_DIR = GOOGLE_DRIVE / "Projects" / "HockeyHighlights"
     GOOGLE_GAMES_DIR = GOOGLE_HOCKEY_DIR / "Games"     # mirror target
@@ -158,3 +164,176 @@ else:
     print("☁️ Optional Mirror Target: (none)")
 print(f"📁 Output (write): {GAMES_DIR}")
 print("=" * 60)
+
+
+# ---------- Engine tuning synced from amherst-display (2026-09-26) ----------
+# Timing windows, OCR health/debug knobs, reel modes and scorebug execution profiles
+# used by hockey_extractor; see scorebug_profiles.py for the layout catalog.
+OUTPUT_PRESET = 'veryfast'
+OUTPUT_CRF = 18
+OUTPUT_AUDIO_CODEC = 'aac'
+OUTPUT_AUDIO_BITRATE = '192k'
+OUTPUT_AUDIO_SAMPLE_RATE = 48000
+OUTPUT_PIXEL_FORMAT = 'yuv420p'
+BOX_SCORE_TIME_IS_ELAPSED = True
+OCR_BACKENDS = ["tesseract", "easyocr"]
+OCR_ENABLE_EASYOCR_FALLBACK = True
+OCR_EASYOCR_LANGS = ["en"]
+OCR_EASYOCR_GPU = False
+OCR_MIN_SUCCESS_RATE = 0.05
+OCR_MIN_PERIOD_RATE = 0.20
+OCR_MIN_AVG_CONFIDENCE = 55.0
+OCR_HEALTH_BAD_CONSECUTIVE_SAMPLES_RESET = 10
+OCR_DEBUG_SAVE_SCOREBUG_CROPS = True
+OCR_DEBUG_SCOREBUG_CROP_DIRNAME = "ocr_scorebug_crops"
+OCR_DEBUG_FAILURE_CROP_LIMIT = 40
+OCR_DEBUG_LOW_CONFIDENCE_THRESHOLD = 65.0
+OCR_DEBUG_LOW_CONFIDENCE_CROP_LIMIT = 25
+EVENT_LOCAL_OCR_WINDOW_SECONDS = 60.0
+EVENT_LOCAL_OCR_STEP_SECONDS = 0.5
+EVENT_LOCAL_OCR_PERSISTENCE_WINDOW_SECONDS = 6.0
+EVENT_LOCAL_OCR_MIN_HITS = 3
+EVENT_LOCAL_OCR_MAX_DIFF_SECONDS = 6.0
+EVENT_ENFORCE_MIN_VIDEO_TIME_FROM_GAME_START = True
+EVENT_MIN_VIDEO_TIME_BUFFER_SECONDS = 240.0
+PENALTY_PP_BEFORE_SECONDS = 2.0
+PENALTY_PP_AFTER_SECONDS = 3.0
+GOAL_CLOCK_STOP_BEFORE_SECONDS = 32.0
+GOAL_CLOCK_STOP_AFTER_SECONDS = 3.0
+GOAL_FALLBACK_BEFORE_SECONDS = 20.0
+GOAL_FALLBACK_AFTER_SECONDS = 4.0
+GOAL_OT_BEFORE_SECONDS = 60.0
+GOAL_OT_POWER_PLAY_BEFORE_SECONDS = 120.0
+GOAL_OT_AFTER_SECONDS = 4.0
+GOAL_ENABLE_LEGACY_TIMING_FALLBACK = False
+GOAL_CLOCK_STOP_ALLOW_CLOSE_SECONDS = 0
+GOAL_ENABLE_PROJECTED_CLOCK_FALLBACK = False
+GOAL_PROJECTED_CLOCK_FALLBACK_REQUIRES_UNRELIABLE = True
+GOAL_LOCAL_OCR_ALLOW_CLOSE_SECONDS = 0
+GOAL_ENABLE_LOCAL_OCR_CLOSEST_FALLBACK = False
+GOAL_LOCAL_OCR_CLOSEST_FALLBACK_REQUIRES_UNRELIABLE = True
+MAJOR_PENALTY_BEFORE_SECONDS = 30.0
+MAJOR_PENALTY_AFTER_SECONDS = 90.0
+OVERLAY_ENABLED = True
+OVERLAY_FONT_SIZE = 42
+OVERLAY_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+OVERLAY_DURATION_SECONDS = 5.0
+DEFAULT_REEL_MODE = "goals_only"
+SUPPORTED_REEL_MODES = (
+    "goals_only",
+    "goals_with_pp_penalties",
+    "goals_with_approved_majors",
+    "full_production",
+)
+DEFAULT_HIGHLIGHT_EXECUTION_PROFILE = "flo_strip_recording"
+HIGHLIGHT_EXECUTION_PROFILES = {
+    # Dense, scorebug-first OCR profile for local Flo recordings.
+    "flohockey_recording": {
+        "sample_interval": 5,
+        "tolerance_seconds": 30,
+        "before_seconds": 8.0,
+        "after_seconds": 6.0,
+        "parallel_ocr": True,
+        "ocr_workers": 4,
+        "broadcast_type": "flohockey",
+        "auto_detect_start": True,
+        "reel_mode": DEFAULT_REEL_MODE,
+    },
+    # Faster FloHockey profile for multi-game backfills where 5-second OCR
+    # sampling is too expensive but we still want the Flo-specific scorebug path.
+    "flohockey_fast_recording": {
+        "sample_interval": 15,
+        "tolerance_seconds": 30,
+        "before_seconds": 8.0,
+        "after_seconds": 6.0,
+        "parallel_ocr": True,
+        "ocr_workers": 4,
+        "broadcast_type": "flohockey",
+        "auto_detect_start": True,
+        "reel_mode": DEFAULT_REEL_MODE,
+    },
+    # Flo standard MHL strip (default): right-side period/clock block.
+    "flo_strip_recording": {
+        "sample_interval": 5,
+        "tolerance_seconds": 30,
+        "before_seconds": 8.0,
+        "after_seconds": 6.0,
+        "parallel_ocr": True,
+        "ocr_workers": 4,
+        "broadcast_type": "flo_strip",
+        "auto_detect_start": True,
+        "reel_mode": DEFAULT_REEL_MODE,
+    },
+    # 2026-27 Flo two-row top-left box: clock stacked over period.
+    "flo_stacked_recording": {
+        "sample_interval": 5,
+        "tolerance_seconds": 30,
+        "before_seconds": 8.0,
+        "after_seconds": 6.0,
+        "parallel_ocr": True,
+        "ocr_workers": 4,
+        "broadcast_type": "flo_stacked_topleft",
+        "auto_detect_start": True,
+        "reel_mode": DEFAULT_REEL_MODE,
+    },
+    # Flo top-left corner bar with period and clock first.
+    "flo_corner_recording": {
+        "sample_interval": 5,
+        "tolerance_seconds": 30,
+        "before_seconds": 8.0,
+        "after_seconds": 6.0,
+        "parallel_ocr": True,
+        "ocr_workers": 4,
+        "broadcast_type": "flo_corner_period_first",
+        "auto_detect_start": True,
+        "reel_mode": DEFAULT_REEL_MODE,
+    },
+    # Amherst home MHL layout: wide white Flo strip with right-side period/clock.
+    "mhl_amherst_recording": {
+        "sample_interval": 15,
+        "tolerance_seconds": 30,
+        "before_seconds": 8.0,
+        "after_seconds": 6.0,
+        "parallel_ocr": True,
+        "ocr_workers": 4,
+        "broadcast_type": "mhl_amherst",
+        "auto_detect_start": True,
+        "reel_mode": DEFAULT_REEL_MODE,
+    },
+    # Summerside home MHL layout: centered black banner with a tighter clock block.
+    "mhl_summerside_recording": {
+        "sample_interval": 15,
+        "tolerance_seconds": 30,
+        "before_seconds": 8.0,
+        "after_seconds": 6.0,
+        "parallel_ocr": True,
+        "ocr_workers": 4,
+        "broadcast_type": "mhl_summerside",
+        "auto_detect_start": True,
+        "reel_mode": DEFAULT_REEL_MODE,
+    },
+    # Backwards-compatible generic profile for non-Flo or manually tuned runs.
+    "generic_recording": {
+        "sample_interval": 30,
+        "tolerance_seconds": 30,
+        "before_seconds": 8.0,
+        "after_seconds": 6.0,
+        "parallel_ocr": True,
+        "ocr_workers": 4,
+        "broadcast_type": "auto",
+        "auto_detect_start": True,
+        "reel_mode": DEFAULT_REEL_MODE,
+    },
+    # Seeded non-standard MHL scorebug profile for Yarmouth home broadcasts.
+    "yarmouth_recording": {
+        "sample_interval": 5,
+        "tolerance_seconds": 30,
+        "before_seconds": 8.0,
+        "after_seconds": 6.0,
+        "parallel_ocr": True,
+        "ocr_workers": 4,
+        "broadcast_type": "yarmouth",
+        "auto_detect_start": True,
+        "reel_mode": DEFAULT_REEL_MODE,
+    },
+}
