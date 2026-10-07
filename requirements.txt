@@ -2,14 +2,15 @@
 # Box-score-based detection with OCR time matching
 
 # Video processing
-moviepy==2.2.1
+# Upstream Pillow >=11.3 TextClip fix and uncapped Pillow metadata (PR #6).
+moviepy @ https://github.com/Zulko/moviepy/archive/97316f37f6a8d3843abfb53eba8f3bb0ea46a008.tar.gz
 imageio==2.37.0
 imageio-ffmpeg==0.6.0
 
 # OCR for scoreboard time extraction
 pytesseract==0.3.10
 opencv-python==4.12.0.88
-Pillow==11.3.0
+Pillow==12.3.0
 
 # Optional OCR fallback (heavier dependency; only used if installed)
 # easyocr==1.7.2

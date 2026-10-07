@@ -77,6 +77,11 @@ Install via: `pip install -r requirements.txt`
 - `requests` - API calls
 - `watchdog` - File watching (for automation)
 
+Pillow 12.3.0 requires the immutable upstream MoviePy commit
+`97316f37f6a8d3843abfb53eba8f3bb0ea46a008` pinned in `requirements.txt`.
+It fixes MoviePy's removed Pillow text-spacing API and removes the upstream
+`Pillow<12` constraint. The published MoviePy 2.2.1 wheel is not a substitute.
+
 ---
 
 ## 🚀 Quick Start
