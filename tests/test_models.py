@@ -37,16 +37,20 @@ class TestGameInfo:
                 filename='test.mp4'
             )
 
-    def test_invalid_league(self):
-        """Test that invalid league raises ValueError"""
-        with pytest.raises(ValueError, match="Invalid league"):
+    def test_empty_league(self):
+        """A league is any league-pack short name; an empty one is rejected"""
+        with pytest.raises(ValueError, match="league"):
             GameInfo(
                 date='2025-01-15',
                 home_team='Team1',
                 away_team='Team2',
-                league='NHL',  # Invalid league
+                league='',
                 filename='test.mp4'
             )
+
+    def test_any_league_name_is_accepted(self):
+        info = GameInfo(date='2025-01-15', home_team='A', away_team='B', league='NHL', filename='t.mp4')
+        assert info.league == 'NHL'
 
     def test_empty_team_name(self):
         """Test that empty team names raise ValueError"""

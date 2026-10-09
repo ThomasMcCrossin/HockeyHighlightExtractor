@@ -13,6 +13,8 @@ Generates markdown/plain text descriptions with:
 from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
+
+from .leagues import find_team
 import json
 
 
@@ -73,7 +75,7 @@ def get_assists(goal: Dict) -> List[str]:
 def generate_youtube_description(
     game_data: Dict,
     matched_goals: List[Dict],
-    our_team: str = 'ramblers'
+    our_team: str = ''
 ) -> str:
     """
     Generate a comprehensive YouTube description from game data.
@@ -105,7 +107,8 @@ def generate_youtube_description(
 
     # Header
     home_away = "vs" if is_home else "@"
-    lines.append(f"Amherst Ramblers {home_away} {opponent_name}")
+    our_name = str(game_data.get('team_name') or our_team or 'Home team')
+    lines.append(f"{our_name} {home_away} {opponent_name}")
     lines.append(f"{date_formatted}")
     if final_score:
         lines.append(f"Final: {final_score}")
@@ -137,8 +140,10 @@ def generate_youtube_description(
         goal_team = goal.get('team', '')
 
         # Determine team abbreviation
-        if goal_team == our_team or goal_team == 'amherst-ramblers':
-            team_abbr = 'AMH'
+        ours = str(our_team or our_name).strip().lower()
+        if ours and (ours in str(goal_team).lower() or str(goal_team).lower() in ours):
+            team = find_team(our_name)
+            team_abbr = (team or {}).get('short') or our_name[:3].upper()
         else:
             # Use first 3 letters of opponent name
             team_abbr = opponent_name[:3].upper() if opponent_name else 'OPP'
@@ -177,9 +182,9 @@ def generate_youtube_description(
     if shots:
         lines.append("SHOTS")
         lines.append("-" * 30)
-        if shots.get('ramblers'):
-            r = shots['ramblers']
-            shots_line = f"Ramblers: {r.get('period1', 0)}-{r.get('period2', 0)}-{r.get('period3', 0)}"
+        if shots.get('ours'):
+            r = shots['ours']
+            shots_line = f"{our_name}: {r.get('period1', 0)}-{r.get('period2', 0)}-{r.get('period3', 0)}"
             if r.get('overtime'):
                 shots_line += f"-{r.get('overtime', 0)}"
             shots_line += f" = {r.get('total', 0)}"
@@ -198,9 +203,9 @@ def generate_youtube_description(
     if pp:
         lines.append("POWER PLAY")
         lines.append("-" * 30)
-        if pp.get('ramblers'):
-            r = pp['ramblers']
-            lines.append(f"Ramblers: {r.get('power_play_goals', 0)}/{r.get('power_play_opportunities', 0)}")
+        if pp.get('ours'):
+            r = pp['ours']
+            lines.append(f"{our_name}: {r.get('power_play_goals', 0)}/{r.get('power_play_opportunities', 0)}")
         if pp.get('opponent'):
             o = pp['opponent']
             lines.append(f"{opponent_name}: {o.get('power_play_goals', 0)}/{o.get('power_play_opportunities', 0)}")
@@ -222,9 +227,9 @@ def generate_youtube_description(
     if goalies:
         lines.append("GOALTENDERS")
         lines.append("-" * 30)
-        for team_key in ['ramblers', 'opponent']:
+        for team_key in ['ours', 'opponent']:
             team_goalies = goalies.get(team_key, [])
-            team_name = 'Ramblers' if team_key == 'ramblers' else opponent_name
+            team_name = our_name if team_key == 'ours' else opponent_name
             for g in team_goalies:
                 name = g.get('name', 'Unknown')
                 decision = f" ({g['decision']})" if g.get('decision') else ''
@@ -234,7 +239,9 @@ def generate_youtube_description(
         lines.append("")
 
     # Hashtags
-    lines.append("#AmherstRamblers #MHL #JuniorHockey #NovaScotia #MaritimeHockey")
+    hashtags = str(game_data.get('hashtags') or '').strip()
+    if hashtags:
+        lines.append(hashtags)
 
     return "\n".join(lines)
 
@@ -264,7 +271,7 @@ def generate_and_save_description(
     game_data: Dict,
     matched_goals: List[Dict],
     output_dir: Path,
-    our_team: str = 'ramblers'
+    our_team: str = ''
 ) -> Path:
     """
     Generate and save YouTube description in one step.
@@ -286,7 +293,8 @@ def generate_description_from_game_dir(
     game_dir: Path,
     output_dir: Optional[Path] = None,
     *,
-    our_team: str = 'ramblers',
+    our_team: str = '',
+    hashtags: str = '',
 ) -> Optional[Path]:
     """
     Generate a YouTube description from saved game metadata + matched events.
@@ -316,7 +324,11 @@ def generate_description_from_game_dir(
     home_game = True if not home_away else (home_away == "home")
     opponent_name = str(game_info.get("away_team") if home_game else game_info.get("home_team") or "")
 
+    team_name = our_team or str(game_info.get("home_team") if home_game else game_info.get("away_team") or "")
+    our_team = team_name
     game_data = {
+        "team_name": team_name,
+        "hashtags": hashtags,
         "date": str(game_info.get("date") or ""),
         "home_game": home_game,
         "opponent": {"team_name": opponent_name or "Opponent"},

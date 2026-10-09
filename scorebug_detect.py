@@ -10,8 +10,8 @@ Pick the scorebug layout for a recording before the full OCR pass.
 
 Returns a ScorebugProfile, or None to keep the catalog/auto-probe behaviour.
 
-Vision env: SCOREBUG_VISION_API_KEY (or DEEPSEEK_API_KEY), SCOREBUG_VISION_BASE_URL
-(default https://api.deepseek.com), SCOREBUG_VISION_MODEL (default deepseek-flash).
+Vision is optional and off unless CLIP_REVIEW_API_KEY, CLIP_REVIEW_BASE_URL and CLIP_REVIEW_MODEL
+are set (hockey_extractor/vision.py).
 """
 
 from __future__ import annotations
@@ -30,8 +30,6 @@ from scorebug_profiles import SCOREBUG_PROFILES, ScorebugProfile
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_VISION_BASE_URL = "https://api.deepseek.com"
-DEFAULT_VISION_MODEL = "deepseek-flash"
 # Optional reference crop per profile, shown to the vision model next to its option.
 REFERENCE_DIR = Path(__file__).resolve().parent / "assets" / "scorebugs"
 
@@ -91,13 +89,14 @@ def _jpeg_data_url(frame: np.ndarray, width: int = 640) -> str:
 
 
 def vision_choose(frames: List[np.ndarray], profiles: List[ScorebugProfile]) -> Tuple[Optional[str], Dict[str, Any]]:
-    api_key = os.environ.get("SCOREBUG_VISION_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key or not frames:
-        return None, {"skipped": "no vision API key" if not api_key else "no frames"}
+    from hockey_extractor import vision
+
+    cfg = vision.settings()
+    if not cfg or not frames:
+        return None, {"skipped": "no vision endpoint configured" if not cfg else "no frames"}
     import requests
 
-    base_url = (os.environ.get("SCOREBUG_VISION_BASE_URL") or DEFAULT_VISION_BASE_URL).rstrip("/")
-    model = os.environ.get("SCOREBUG_VISION_MODEL") or DEFAULT_VISION_MODEL
+    api_key, base_url, model = cfg
     content: List[Dict[str, Any]] = [{"type": "text", "text": (
         "Below are reference scorebug layouts, then frames from one hockey broadcast. "
         "Which reference layout do the broadcast frames show? Compare where the scorebug sits "
@@ -123,8 +122,7 @@ def vision_choose(frames: List[np.ndarray], profiles: List[ScorebugProfile]) -> 
         "response_format": {"type": "json_object"},
         "messages": [{"role": "user", "content": content}],
     }
-    if "deepseek" in base_url:
-        body["thinking"] = {"type": "disabled"}
+    body.update(vision.extra_body())
     resp = requests.post(f"{base_url}/chat/completions", json=body, timeout=120,
                          headers={"Authorization": f"Bearer {api_key}"})
     resp.raise_for_status()

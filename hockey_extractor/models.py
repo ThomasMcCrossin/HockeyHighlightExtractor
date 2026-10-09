@@ -42,8 +42,8 @@ class GameInfo:
             raise ValueError(f"Invalid date '{self.date}': {e}")
 
         # Validate league
-        if self.league not in ['MHL', 'BSHL', 'Unknown']:
-            raise ValueError(f"Invalid league '{self.league}', expected MHL, BSHL, or Unknown")
+        if not str(self.league or '').strip():
+            raise ValueError("league must be a non-empty string (a league pack short name, or 'Unknown')")
 
         # Validate home_away
         if self.home_away not in ['home', 'away', 'unknown']:

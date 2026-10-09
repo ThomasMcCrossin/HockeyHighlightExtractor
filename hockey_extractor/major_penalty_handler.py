@@ -623,7 +623,7 @@ def upload_to_drive(
         if home_team and away_team:
             matchup = f"{home_team} vs {away_team}"
         elif opponent_name:
-            matchup = f"Amherst vs {opponent_name}"
+            matchup = f"vs {opponent_name}"
 
         parts = []
         if date_str:
@@ -744,7 +744,10 @@ def send_review_notification(
     opponent_name = opponent.get('team_name', 'Unknown') if isinstance(opponent, dict) else str(opponent)
     game_date = game_info.get('date', 'Unknown')
 
-    subject = f"Major Penalty Review Required - Ramblers vs {opponent_name} ({game_date})"
+    home_name = str(game_info.get('home_team') or '').strip()
+    away_name = str(game_info.get('away_team') or '').strip()
+    matchup_text = f"{home_name} vs {away_name}" if home_name and away_name else f"vs {opponent_name}"
+    subject = f"Major Penalty Review Required - {matchup_text} ({game_date})"
 
     # Build list of penalties
     penalty_list = []
@@ -766,7 +769,7 @@ def send_review_notification(
 
     html_content = f"""
     <h2>Major Penalty Clips Require Review</h2>
-    <p><strong>Game:</strong> Amherst Ramblers vs {opponent_name}</p>
+    <p><strong>Game:</strong> {matchup_text}</p>
     <p><strong>Date:</strong> {game_date}</p>
 
     <h3>Penalties:</h3>
@@ -795,7 +798,7 @@ def send_review_notification(
     text_content = f"""
 Major Penalty Clips Require Review
 
-Game: Amherst Ramblers vs {opponent_name}
+Game: {matchup_text}
 Date: {game_date}
 
 Penalties:

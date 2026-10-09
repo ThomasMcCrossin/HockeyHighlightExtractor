@@ -28,18 +28,19 @@ class FileManager:
         self.teams_data = self._load_teams_data()
 
     def _load_teams_data(self) -> Dict:
-        """Load teams.json data"""
-        try:
-            teams_file = self.config.TEAMS_FILE
-            if teams_file.exists():
-                with open(teams_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            else:
-                logger.warning(f"Teams file not found: {teams_file}")
-                return {"teams": [], "league_meta": {}}
-        except Exception as e:
-            logger.error(f"Failed to load teams data: {e}")
-            return {"teams": [], "league_meta": {}}
+        """Team list for league detection, built from the league packs (see leagues.py)."""
+        from . import leagues
+
+        teams = []
+        for pack in leagues.hockey_packs():
+            for t in pack.get("teams", []):
+                teams.append({
+                    "slug": t.get("id", ""),
+                    "league": str(pack.get("short") or pack["id"]).upper(),
+                    "name": t.get("name", ""),
+                    "aliases": [a for a in (t.get("nickname"), t.get("city")) if a],
+                })
+        return {"teams": teams, "league_meta": {}}
 
     def parse_mhl_filename(self, filename: str) -> Optional[Dict]:
         """
@@ -145,7 +146,7 @@ class FileManager:
             away_team: Away team name
 
         Returns:
-            League identifier (MHL, BSHL, or Unknown)
+            League short name from a league pack, or Unknown
         """
         teams = self.teams_data.get('teams', [])
 
