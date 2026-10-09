@@ -8,7 +8,7 @@ the MHL or any particular team.
 
 ```
 overlays/
-  leagues/<id>/league.json   league pack (MHL is the first-class one; demo-soccer proves neutrality)
+  leagues/<id>/league.json   league pack (MHL is the worked example; demo-hockey and demo-soccer are fictional)
   samples.py -> samples/     resolved sample specs built from the packs
   themes/<name>/theme.mjs    a theme (baseline = reference implementation)
   render.mjs                 spec + theme -> PNG, with layout checks

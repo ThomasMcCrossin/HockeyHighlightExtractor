@@ -121,3 +121,27 @@ def test_stub_agent_follows_the_agent_command_protocol(tmp_path):
     checked = subprocess.run([sys.executable, str(REPO / "skills" / "hockey-clip-review" / "scripts" / "check_verdict.py"),
                               str(out), "--packet", str(packet), "--json"], capture_output=True, text=True)
     assert json.loads(checked.stdout)["ok"], checked.stdout
+
+
+def test_sample_data_generator_matches_the_scorebug_layout_and_box_score_format(tmp_path):
+    """The synthetic frame is readable with the layout the quickstart uses, and its box score loads."""
+    import shutil
+    if not shutil.which("tesseract"):
+        pytest.skip("tesseract not installed")
+    import cv2
+    import numpy as np
+    import make_sample_data as sample
+    from hockey_extractor.ocr_engine import OCREngine
+    from hockey_extractor.providers import ManualBoxScoreProvider
+
+    t = 100.0
+    frame = cv2.cvtColor(np.array(sample.frame(t)), cv2.COLOR_RGB2BGR)
+    remaining = sample.PERIOD_LEN - sample.game_clock(t)
+    result = OCREngine().extract_time_from_frame(frame, broadcast_type="flo_corner_period_first")
+    assert result == (1, f"{remaining // 60}:{remaining % 60:02d}")
+
+    path = tmp_path / "game.json"
+    path.write_text(json.dumps(sample.box_score()))
+    provider = ManualBoxScoreProvider(path)
+    assert len(provider.goals()) == 2 and len(provider.penalties()) == 1
+    assert provider.game_info("x.mp4")["league"] == "DHL"

@@ -1,491 +1,157 @@
-# 🏒 Hockey Highlight Extractor v2.0
+# Hockey Highlight Extractor
 
-**Box-score-based highlight detection with OCR time matching**
+Turns a recording of a hockey broadcast and the game's box score into a highlight reel with
+broadcast-style overlays. It works for any league. The Maritime Junior Hockey League (MHL, a
+HockeyTech league) is the fully built worked example; adding another league is data, not code
+([docs/adding-a-league.md](docs/adding-a-league.md)).
 
-Automatically extract hockey game highlights by matching official box score events (goals, penalties) with video timestamps extracted via OCR.
+```
+recording + box score
+        |
+        v
+  engine (OCR of the broadcast scorebug, box-score matching)  -->  clips around each goal/penalty
+        |
+        v   (optional, only when configured)
+  vision review (an agent or a vision API re-picks each clip's in/out points)
+        |
+        v
+  reel builder (league pack + theme -> overlays, ffmpeg composite)  -->  output/reel.mp4
+```
 
----
+## Two tiers
 
-## ✨ What's New in v2.0
+**Engine only (default).** Needs no AI and no account. The engine reads the game clock off the
+broadcast scorebug with OCR, matches each goal and penalty in the box score to a moment in the
+video and cuts a clip around it. This is what runs when you follow the quickstart. Expect
+clips that contain the event but are cut by a fixed window: goals often end as the celebration
+starts, and minor-penalty clips usually land after the call. In the bake-off below, blinded
+judges scored engine-only highlights 4.56 out of 10.
 
-### Complete Rewrite
-- **Box-score-based detection** - Uses official game data instead of unreliable audio analysis
-- **OCR time extraction** - Reads game clock from video scoreboard using Tesseract
-- **Event matching** - Syncs box score events to exact video timestamps
-- **Modular architecture** - Clean, maintainable code structure
-- **Automated processing** - Watch folder mode for automatic video processing
+**With vision review (optional).** A reviewer looks at frames from the recording and chooses
+better in/out points: the build-up to a goal, the end of the celebration, the call on a penalty.
+It can also drop a clip whose event is not in the recording. The reviewer is any
+OpenAI-compatible vision API or any agent command-line tool that can read images and run
+commands. It turns on by itself when you set an agent command or an API key, endpoint and model,
+and is skipped without a message otherwise. The best agent reviewer scored 7.09 out of 10 in the
+same test. Details, costs and the failure modes: [docs/vision-review.md](docs/vision-review.md).
 
-### Why This Approach Works Better
-| v1.0 (Audio-Based) | v2.0 (Box-Score-Based) |
-|-------------------|------------------------|
-| ❌ Required excellent audio quality | ✅ No audio dependency |
-| ❌ Couldn't distinguish event types | ✅ Knows goals vs penalties |
-| ❌ No team attribution | ✅ Knows which team scored |
-| ❌ Never worked reliably | ✅ Ground truth from official data |
+The engine is being improved separately and its numbers will move; the figures here are the
+2026-10-08 bake-off.
 
----
+## Quickstart
 
-## 🆕 Scorebug layouts (2026-27 sync)
-
-- **Layout catalog**: `scorebug_profiles.py` lists known broadcast scorebugs. Box layouts in
-  `hockey_extractor/ocr_engine.py` (`SCOREBUG_BOX_LAYOUTS`) describe the period and clock as
-  separate boxes, which are cropped and stitched before OCR, so stacked bugs ("13:03" over "1st")
-  read like one-line banners.
-- **Per-recording detection**: `scorebug_detect.py` picks the layout before the OCR pass. Every
-  known layout reads a few frames (each only parses its own bug), and if the vote is weak or close an
-  OpenAI-compatible vision model can pick from reference crops in `assets/scorebugs/`
-  (`SCOREBUG_VISION_API_KEY` or `DEEPSEEK_API_KEY`; optional).
-- **Adding a layout**: one `SCOREBUG_BOX_LAYOUTS` entry, one profile, and a crop in
-  `tests/fixtures/scorebugs/` so `tests/test_scorebug_layouts.py` guards it.
-- **Partial recordings**: a recording can join mid-game or end early. Periods start from what the
-  bug shows, and goals outside the recording are reported as unmatched instead of clipped at its edge.
-- **Frozen scorebugs**: operator-driven bugs can stop (clock and score) for minutes of play. A clock
-  that is then jumped ahead is accepted when the next readings agree, and goals the clock can't
-  time are placed by `goal_locator.py` from the broadcast's goal celebration, using the same optional
-  vision model (`GOAL_VISION_LOCATOR = False` in `config.py` disables it).
-- **Shootouts**: games that end in a shootout get one clip from the end of overtime through the
-  shootout, found from the scorebug rather than the (lagging) game status.
-
-## 🎯 Features
-
-- **Automatic box score fetching** via HockeyTech API (MHL & BSHL)
-- **OCR scoreboard detection** to extract game time from video
-- **Smart event matching** - Syncs box score events to video timestamps
-- **Individual highlight clips** - One clip per goal/event
-- **Compiled highlights reel** - All clips combined into single video
-- **Watch folder automation** - Auto-process videos when added to folder
-- **Detailed logging** - Debug info for troubleshooting
-
----
-
-## 📋 Requirements
-
-### System Requirements
-- **Python 3.8+**
-- **Tesseract OCR** (for scoreboard time extraction)
-  - **macOS**: `brew install tesseract`
-  - **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr`
-  - **Windows**: Download from [GitHub](https://github.com/UB-Mannheim/tesseract/wiki)
-
-### Python Dependencies
-Install via: `pip install -r requirements.txt`
-
-**Core dependencies:**
-- `moviepy` - Video processing
-- `opencv-python` - Image processing
-- `pytesseract` - OCR interface
-- `requests` - API calls
-- `watchdog` - File watching (for automation)
-
-Pillow 12.3.0 requires the immutable upstream MoviePy commit
-`97316f37f6a8d3843abfb53eba8f3bb0ea46a008` pinned in `requirements.txt`.
-It fixes MoviePy's removed Pillow text-spacing API and removes the upstream
-`Pillow<12` constraint. The published MoviePy 2.2.1 wheel is not a substitute.
-
----
-
-## 🚀 Quick Start
-
-### 1. Install Dependencies
+You need Python 3.10+, `ffmpeg`, `tesseract` (the OCR program) and Node 20+.
 
 ```bash
-# Install Tesseract OCR (system package)
-# macOS:
-brew install tesseract
+# 1. Python dependencies
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 
-# Ubuntu/Debian:
-sudo apt-get install tesseract-ocr
+# 2. Overlay renderer (Node + a headless browser, needed only for overlays)
+npm install
+npx playwright install chromium
 
-# Windows: Download and install from GitHub
+# 3. Make a small synthetic game (about 3.5 MB, no real footage) and its box score
+.venv/bin/python scripts/make_sample_data.py
 
-# Install Python dependencies
-pip install -r requirements.txt
+# 4. Recording + box score -> clips -> reel with overlays
+.venv/bin/python scripts/run_game.py --video sample_data/sample_game.mp4 \
+    --box-score sample_data/sample_game.json --cards
 ```
 
-### 2. Configure HockeyTech Access
+The last line printed is the reel (`Games/<date>_<home>_vs_<away>/output/reel.mp4`). The sample
+run takes a couple of minutes: the engine matches 3 of 3 box-score events, cuts 2 goal
+clips, and the reel adds a lower third to each goal plus an intro and a final-score card. The
+sample game is fictional (the "Demo Hockey League" pack in `overlays/leagues/demo-hockey`).
 
-Set `HOCKEYTECH_API_KEY` in your shell before running the extractor:
+Without Node, run `run_game.py` with `--no-overlays` to get the clips joined with no graphics.
+`python -m pytest -q` runs the tests (no video, browser or network needed).
+
+### Your own game
 
 ```bash
-export HOCKEYTECH_API_KEY=your_key_here
+# a box score you wrote or exported (format: docs/adding-a-league.md)
+.venv/bin/python scripts/run_game.py --video game.mp4 --box-score game.json
+
+# or fetch it from a HockeyTech league (the MHL pack is the example)
+export HOCKEYTECH_API_KEY=...        # the public feed key your league's own site uses
+.venv/bin/python scripts/run_game.py --video game.mp4 --league mhl --hockeytech-game-id 4943 --team Truro
 ```
 
-### 3. Configure Paths
+The scorebug layout is detected from the video. If detection picks wrongly, name one with
+`--profile` (profiles are listed in `config.py`, layouts in `scorebug_profiles.py`). A recording
+may start late or end early: goals outside it are reported as unmatched, not clipped at its edge.
 
-Edit `config.py` to set your directories:
+### Turn on vision review
 
-```python
-GAMES_DIR = LOCAL_REPO_DIR / "Games"   # Where outputs are saved
-TEAMS_FILE = LOCAL_REPO_DIR / "teams.json"  # Team data
-```
-
-### 4. Run the Extractor
-
-**Interactive Mode** (select video from list):
-```bash
-python main.py
-```
-
-**Watch Folder Mode** (automatic processing):
-```bash
-# Watch Downloads folder
-python watch_folder.py
-
-# Watch specific directory
-python watch_folder.py /path/to/videos
-```
-
----
-
-## 📂 Project Structure
-
-```
-HockeyHighlightExtractor/
-├── main.py                     # Main entry point (interactive)
-├── watch_folder.py             # Watch folder automation
-├── config.py                   # Configuration
-├── requirements.txt            # Python dependencies
-├── teams.json                  # MHL & BSHL team data
-│
-├── hockey_extractor/           # Core modules
-│   ├── __init__.py
-│   ├── video_processor.py      # Video loading and clip creation
-│   ├── box_score.py            # HockeyTech API integration
-│   ├── ocr_engine.py           # Scoreboard time extraction
-│   ├── event_matcher.py        # Event-to-video matching
-│   └── file_manager.py         # File organization
-│
-└── Games/                      # Output directory
-    └── YYYY-MM-DD_Team1_vs_Team2/
-        ├── output/             # Final highlights reel
-        ├── clips/              # Individual highlight clips
-        ├── data/               # Box score and metadata
-        ├── logs/               # Processing logs
-        └── source/             # Original video (moved after processing)
-```
-
----
-
-## 🎬 How It Works
-
-### Processing Pipeline
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  1. PARSE FILENAME                                              │
-│     Extract: date, teams, league from filename                  │
-└────────────────────┬────────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────────┐
-│  2. FETCH BOX SCORE                                             │
-│     HockeyTech API → goals, penalties, times                    │
-└────────────────────┬────────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────────┐
-│  3. LOAD VIDEO                                                  │
-│     MoviePy → video clip object                                 │
-└────────────────────┬────────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────────┐
-│  4. EXTRACT TIME (OCR)                                          │
-│     Sample frames → Tesseract → game time from scoreboard       │
-└────────────────────┬────────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────────┐
-│  5. MATCH EVENTS                                                │
-│     Box score events ↔ Video timestamps                         │
-└────────────────────┬────────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────────┐
-│  6. CREATE CLIPS                                                │
-│     Extract 8s before + 6s after each event                     │
-└────────────────────┬────────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────────┐
-│  7. COMPILE HIGHLIGHTS                                          │
-│     Concatenate clips → final highlights reel                   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🎮 Usage Examples
-
-### Example 1: Process a Single Video
+Set one of these and run the same command; there is no other switch.
 
 ```bash
-$ python main.py
+# an agent CLI that can read images and run shell commands (the command is yours to choose)
+export CLIP_REVIEW_AGENT_CMD='<your-agent> <flags> {prompt}'
 
-🏒 Hockey Highlight Extractor v2.0
-
-Found 2 video(s):
-
-1. 2025-01-15 Amherst Ramblers vs Truro Bearcats Home 7.00pm.ts (1234.5 MB)
-2. 2025-01-20 Valley Wildcats vs Yarmouth Mariners Away 7.30pm.mp4 (987.3 MB)
-
-Enter video number to process (1-2): 1
-
-======================================================================
-HOCKEY HIGHLIGHT EXTRACTOR v2.0
-======================================================================
-Processing: 2025-01-15 Amherst Ramblers vs Truro Bearcats Home 7.00pm.ts
-
-======================================================================
-STEP 1: PARSING GAME INFORMATION
-======================================================================
-📅 Date: 2025-01-15
-🏒 League: MHL
-🏠 Home: Amherst Ramblers
-✈️  Away: Truro Bearcats
-🎯 Perspective: Home
-
-[... processing continues ...]
+# or any OpenAI-compatible vision endpoint
+export CLIP_REVIEW_API_KEY=... CLIP_REVIEW_BASE_URL=https://.../v1 CLIP_REVIEW_MODEL=...
 ```
 
-### Example 2: Watch Folder Automation
+`--review off` forces it off; `--review api|agent|escalate` forces a backend. See
+[docs/vision-review.md](docs/vision-review.md). To see the plumbing without a model, use
+`CLIP_REVIEW_AGENT_CMD='python {repo}/examples/stub_review_agent.py {prompt}'`.
 
-```bash
-$ python watch_folder.py ~/Downloads
+## Stages and scripts
 
-======================================================================
-🏒 Hockey Highlight Extractor - Watch Folder Mode
-======================================================================
+| stage | script | what it does |
+|---|---|---|
+| all of it | `scripts/run_game.py` | recording + box score -> engine clips -> optional review -> reel |
+| engine | `scripts/process_game.py` | OCR the scorebug, match events, cut clips; writes the game folder |
+| review | `scripts/review_game.py` | vision review of a game folder; `--apply` writes reviewed clips and a reel manifest |
+| reel | `scripts/build_reel.py` | clips + overlays -> `output/reel.mp4`; `--reviewed` uses the review result |
+| demo data | `scripts/make_sample_data.py` | synthetic recording and box score |
+| leak check | `scripts/leak_scan.sh` | scans the tree and diff for paths, keys, e-mail addresses and media |
 
-👀 Watching directory: /Users/tom/Downloads
-📋 Log file: logs/watch_folder_20250115_193045.log
-📹 Supported formats: .ts, .mp4, .avi, .mov, .mkv
-Waiting for new video files...
-Press Ctrl+C to stop
-
-📹 New video detected: game.mp4
-🎬 PROCESSING: game.mp4
-[... automatic processing ...]
-✅ Successfully processed: game.mp4
-```
-
----
-
-## 📝 Video Filename Format
-
-For best results, use this filename format (MHL standard):
+## Layout
 
 ```
-YYYY-MM-DD Team1 vs Team2 Home/Away HH.MMam/pm.ext
+hockey_extractor/    engine: OCR, matching, clips, league packs, providers, reel builder
+  providers/           box-score adapters: HockeyTech and manual JSON
+clip_review/         vision review: packets, backends, review, apply
+skills/              portable agent skill for clip review (SKILL.md, frame and verdict tools)
+overlays/            overlay contract, renderer, league packs, themes
+scorebug_profiles.py, scorebug_detect.py, goal_locator.py   scorebug layouts and detection
+config.py            engine settings and scorebug execution profiles
+assets/              scorebug reference crops, fonts (OFL), placeholder logo
+docs/                architecture, adding a league, vision review, overlays, history
+tests/               engine, provider and wiring tests
 ```
 
-**Examples:**
-- `2025-01-15 Amherst Ramblers vs Truro Bearcats Home 7.00pm.ts`
-- `2025-02-20 Valley Wildcats vs Yarmouth Mariners Away 3.30pm.mp4`
+## Results
 
-**Why this matters:**
-- Automatic date extraction
-- Team name matching for box score lookup
-- League detection (MHL vs BSHL)
+The 2026-10-08 bake-off compared vision reviewers and the engine on 39 incidents from recorded
+games (blinded judges, 0 to 10 highlight score; full table, method and caveats in
+[docs/vision-review.md](docs/vision-review.md)).
 
----
+| clips from | highlight score | tokens per incident |
+|---|---|---|
+| best agent reviewer | 7.09 | 672k |
+| lean agent reviewer (thinking off, 20 tool calls) | 6.39 | 360k |
+| other agent reviewers | 5.60 to 6.04 | 199k to 1.32M |
+| API first, agent only where unsure (`escalate`) | 5.39 | 229k |
+| engine only | 4.56 | none |
+| one-shot vision API (no agent) | 3.88 | 11k |
 
-## ⚙️ Configuration
+Every agent reviewer beat the engine. The one-shot API reviewer did not: it needs the agent's
+ability to go back for more frames. The ranking is highlight quality, not whether the goal is in
+the clip; the engine usually does contain the event.
 
-### Adjusting OCR Settings
+## Notes
 
-If OCR is missing the scoreboard, adjust the ROI (region of interest):
+- Box-score times in HockeyTech are elapsed in the period; broadcast clocks count down. The
+  engine converts, and each league pack states which one its overlays show.
+- The project works from recordings you already have; it does not download streams.
+- Logos are not shipped. League packs point at logo paths you supply; a missing file falls back
+  to a generated placeholder ([assets/logos/README.md](assets/logos/README.md)).
+- History: [docs/history/](docs/history/) keeps the notes from the original rewrite.
 
-```python
-# In ocr_engine.py
-def detect_scoreboard_roi(self, frame, method='auto'):
-    # Change 'auto' to 'top' or 'bottom' depending on scoreboard location
-    # Or manually set ROI:
-    return (x, y, width, height)  # Pixel coordinates
-```
+## License
 
-### HockeyTech API Configuration
-
-Update league IDs in `hockey_extractor/box_score.py`:
-
-```python
-LEAGUE_CONFIGS = {
-    'MHL': {
-        'client_code': 'mhl',
-        'league_id': '2',  # Update with actual MHL league ID
-    },
-    'BSHL': {
-        'client_code': 'bshl',
-        'league_id': '1',  # Update with actual BSHL league ID
-    }
-}
-```
-
-### Clip Timing
-
-Adjust how much video to include before/after events:
-
-```python
-# In main.py, STEP 6
-created_clips = video_processor.create_highlight_clips(
-    goal_events,
-    game_folders['clips_dir'],
-    before_seconds=8,   # ← Change this
-    after_seconds=6     # ← Change this
-)
-```
-
----
-
-## 🐛 Troubleshooting
-
-### "Could not find game in league database"
-
-**Causes:**
-1. Game hasn't been played yet
-2. Team names don't match league records
-3. API is unavailable
-
-**Solutions:**
-- Check filename matches teams.json entries
-- Verify game date is correct
-- Try alternative team names/aliases
-
-### "No timestamps extracted from video"
-
-**Causes:**
-1. Tesseract not installed
-2. Scoreboard not visible/readable
-3. Wrong ROI configuration
-
-**Solutions:**
-```bash
-# Verify Tesseract is installed
-tesseract --version
-
-# Check scoreboard visibility
-# Save debug frame to inspect ROI
-ocr_engine.save_debug_frame(frame, Path('debug.jpg'), roi)
-```
-
-### "No events could be matched to video"
-
-**Causes:**
-1. OCR extraction failed
-2. Video doesn't cover full game
-3. Time format incompatible
-
-**Solutions:**
-- Review `data/video_timestamps.json` to check extracted times
-- Adjust tolerance in event matching: `tolerance_seconds=60`
-- Manually configure scoreboard ROI
-
----
-
-## 🔧 Advanced Features
-
-### Custom Event Filters
-
-Process only specific event types:
-
-```python
-# Filter to goals only
-goal_events = event_matcher.filter_events_by_type(events, ['goal'])
-
-# Include penalties
-highlight_events = event_matcher.filter_events_by_type(events, ['goal', 'penalty'])
-```
-
-### Timestamp Interpolation
-
-Fill in missing OCR timestamps:
-
-```python
-enhanced_timestamps = event_matcher.estimate_missing_timestamps(
-    video_timestamps,
-    video_processor.duration
-)
-```
-
-### Cache Management
-
-Box scores are cached in `Games/*/data/` to avoid repeated API calls.
-
-Clear cache:
-```bash
-rm Games/*/data/*_boxscore.json
-```
-
----
-
-## 📊 Output Files
-
-After processing, each game folder contains:
-
-```
-Games/2025-01-15_Amherst_Ramblers_vs_Truro_Bearcats/
-│
-├── output/
-│   └── highlights.mp4                  # Final highlights reel
-│
-├── clips/
-│   ├── 01_GOAL_P1_Amherst_Ramblers.mp4
-│   ├── 02_GOAL_P2_Truro_Bearcats.mp4
-│   └── ...
-│
-├── data/
-│   ├── game_metadata.json              # Game info + box score
-│   ├── matched_events.json             # Events with video times
-│   ├── video_timestamps.json           # OCR extracted times
-│   └── MHL_1234_boxscore.json          # Cached box score
-│
-├── logs/
-│   └── processing.log                  # Detailed debug log
-│
-└── source/
-    └── original_video.ts               # Moved from input location
-```
-
----
-
-## 🤝 Contributing
-
-This project is designed for local use with MHL and BSHL games. To adapt for other leagues:
-
-1. Add league configuration to `box_score.py`
-2. Update `teams.json` with team data
-3. Adjust filename parser in `file_manager.py`
-4. Configure OCR ROI for different scoreboard layouts
-
----
-
-## 📜 License
-
-MIT License - Free to use and modify
-
----
-
-## 🆘 Support
-
-**Issues?**
-1. Check logs in `Games/*/logs/processing.log`
-2. Review `data/video_timestamps.json` for OCR accuracy
-3. Verify Tesseract installation: `tesseract --version`
-4. Ensure video filename matches expected format
-
-**Questions?**
-- Review this README
-- Check code comments in `hockey_extractor/` modules
-- Examine example output files
-
----
-
-## 📈 Version History
-
-### v2.0.0 (Current)
-- Complete rewrite with box-score-based detection
-- OCR time extraction from scoreboard
-- Modular architecture
-- Watch folder automation
-- HockeyTech API integration
-
-### v1.0.0 (Deprecated)
-- Audio-based detection (unreliable, removed)
-
----
-
-**Made with 🏒 for hockey highlight extraction**
+MIT, as stated in earlier versions of this README. A `LICENSE` file has not been added yet.
