@@ -47,6 +47,7 @@ def main(argv=None) -> int:
     ap.add_argument("--box-score", type=Path)
     ap.add_argument("--hockeytech-game-id")
     ap.add_argument("--league")
+    ap.add_argument("--team")
     ap.add_argument("--games-dir", type=Path)
     ap.add_argument("--profile", default="auto")
     ap.add_argument("--sample-interval", type=int, default=0)
@@ -61,7 +62,7 @@ def main(argv=None) -> int:
 
     pg = ["--video", str(args.video), "--profile", args.profile]
     for flag, val in (("--box-score", args.box_score), ("--hockeytech-game-id", args.hockeytech_game_id), ("--league", args.league),
-                      ("--games-dir", args.games_dir)):
+                      ("--team", args.team), ("--games-dir", args.games_dir)):
         if val:
             pg += [flag, str(val)]
     if args.sample_interval:

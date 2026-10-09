@@ -248,3 +248,5 @@ temp/
 *.mp4
 !examples/**/*.mp4
 sample_data/
+.venv/
+venv/

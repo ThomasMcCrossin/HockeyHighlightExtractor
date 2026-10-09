@@ -27,7 +27,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 
-from scorebug_detect import DEFAULT_VISION_BASE_URL, DEFAULT_VISION_MODEL, _jpeg_data_url
+from scorebug_detect import _jpeg_data_url
+from hockey_extractor import vision
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +52,7 @@ PROMPT = (
 
 
 def _vision_settings() -> Optional[Tuple[str, str, str]]:
-    api_key = os.environ.get("SCOREBUG_VISION_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
-        return None
-    base_url = (os.environ.get("SCOREBUG_VISION_BASE_URL") or DEFAULT_VISION_BASE_URL).rstrip("/")
-    return api_key, base_url, os.environ.get("SCOREBUG_VISION_MODEL") or DEFAULT_VISION_MODEL
+    return vision.settings()
 
 
 def bracket(period: int, remaining: int, readings: List[Dict[str, Any]]) -> Optional[Tuple[float, float]]:
@@ -98,8 +95,7 @@ def label_frames(video_path: str, lo: float, hi: float, usage: Dict[str, int]) -
                 content.append({"type": "image_url", "image_url": {"url": _jpeg_data_url(frame, width=512)}})
             body: Dict[str, Any] = {"model": model, "temperature": 0, "response_format": {"type": "json_object"},
                                     "messages": [{"role": "user", "content": content}]}
-            if "deepseek" in base_url:
-                body["thinking"] = {"type": "disabled"}
+            body.update(vision.extra_body())
             resp = requests.post(f"{base_url}/chat/completions", json=body, timeout=180,
                                  headers={"Authorization": f"Bearer {api_key}"})
             resp.raise_for_status()

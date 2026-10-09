@@ -66,7 +66,7 @@ Rules every theme must meet (`render.mjs` checks the first three):
 - Nothing goes off-frame. Keep a 96 px side and 54 px top/bottom title-safe margin.
 - Lower-third kinds (`score penalty fight save moment`) stay clear of the top-left
   broadcast scorebug zone (0,0)-(720,190). Keep them in the bottom ~30% of the frame.
-- They are readable on a canteen TV across the room. Text over video sits on a solid or
+- They are readable on a TV across the room. Text over video sits on a solid or
   near-solid panel.
 - Team colours come from the spec. Light colours (e.g. a yellow or white team) still have
   readable text: use `team.text`.

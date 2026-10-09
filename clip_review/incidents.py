@@ -20,6 +20,9 @@ WANTED_RE = re.compile(r"fight|major|misconduct|match penalty|game misconduct|gr
 # before the goal (a bake-off finding; see docs/vision-review.md). Up to lead_max (45 s) when the play builds longer.
 MIN_GOAL_LEAD_S = float(os.environ.get("CLIP_REVIEW_MIN_LEAD_S", "15"))
 
+# Incident classes are the keys below plus penalty_class(). A new class (a scrum, say) needs a
+# BOUNDS entry, a rule in penalty_class() or build_incidents() and a line in SKILL.md; apply.py
+# routes 'major' and 'fight' to the rough-stuff reel through ROUGH_CLASSES.
 # Authority bounds per incident class (seconds; *_t values relative to the anchor). The code
 # clamps a reviewer's window into these and rejects a verdict that still breaks them.
 BOUNDS: Dict[str, Dict[str, float]] = {

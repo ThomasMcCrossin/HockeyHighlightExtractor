@@ -64,6 +64,11 @@ def run(args: argparse.Namespace) -> int:
         league = info["league"]
         box_source = f"hockeytech:{args.hockeytech_game_id}"
 
+    if args.team:
+        config.FOLLOWED_TEAM = args.team
+        t, home, away = args.team.lower(), info["home_team"].lower(), info["away_team"].lower()
+        info["home_away"] = "away" if t in away and t not in home else "home"
+
     folders = FileManager(config).create_game_folder_from_teams(
         date=info["date"], home_team=info["home_team"], away_team=info["away_team"], league=league,
         filename=video.name, home_away=info["home_away"], time_str="unknown")
@@ -112,6 +117,7 @@ def parser() -> argparse.ArgumentParser:
     src.add_argument("--box-score", type=Path, help="manual box-score JSON")
     src.add_argument("--hockeytech-game-id", help="HockeyTech game id (needs --league)")
     ap.add_argument("--league", help="league pack id or short name")
+    ap.add_argument("--team", help="the team the highlights follow (part of its name); default: the box score's followed_team, else the home team")
     ap.add_argument("--games-dir", type=Path, help="default: $HOCKEY_GAMES_DIR or ./Games")
     ap.add_argument("--profile", default="auto", help="scorebug execution profile name, or auto (detect from the video)")
     ap.add_argument("--reel-mode", default="", help="goals_only (default), goals_with_pp_penalties, goals_with_all_penalties, ...")

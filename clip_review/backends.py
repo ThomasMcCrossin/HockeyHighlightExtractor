@@ -8,7 +8,8 @@ Review backends. Each returns {"verdict": dict|None, "stats": {...}, "error": st
          switches such as disabling thinking).
   agent  an agent harness command (CLIP_REVIEW_AGENT_CMD / CLIP_REVIEW_ADVERSARY_CMD) run in the
          packet dir; it reads SKILL.md, looks at frames itself and writes the verdict file.
-         `{prompt}` in the command is the prompt (else stdin); `{skill}` is the skill dir.
+         `{prompt}` in the command is the prompt (else stdin); `{skill}` is the skill dir; `{repo}` the repo root
+         (the command runs in the packet directory, so use these for paths).
   escalate  the api backend for every incident, handing off to an agent backend only when
          should_escalate() says so (low confidence, scorebug-alert game, fight or major).
 
@@ -41,7 +42,8 @@ def _env(*names: str) -> str:
 
 def api_configured() -> bool:
     """True when the api backend has a key, an endpoint and a model (no provider is assumed)."""
-    return bool(_env("CLIP_REVIEW_API_KEY") and _env("CLIP_REVIEW_BASE_URL") and _env("CLIP_REVIEW_MODEL"))
+    from hockey_extractor import vision
+    return vision.configured()
 
 
 def _data_url(path: Path) -> str:
@@ -80,9 +82,8 @@ class ApiBackend:
             raise RuntimeError("no vision API key (CLIP_REVIEW_API_KEY)")
         body: Dict[str, Any] = {"model": self.model, "temperature": 0, "response_format": {"type": "json_object"},
                                 "messages": [{"role": "user", "content": content}]}
-        extra = _env("CLIP_REVIEW_API_EXTRA")
-        if extra:
-            body.update(json.loads(extra))
+        from hockey_extractor import vision
+        body.update(vision.extra_body())
         last: Optional[Exception] = None
         for attempt in range(retries + 1):
             try:
@@ -393,7 +394,7 @@ class AgentBackend:
         return f"agent|{self.cmd}"
 
     def _argv(self, prompt: str) -> Tuple[List[str], Optional[str]]:
-        argv = [a.replace("{skill}", str(SKILL_DIR)) for a in shlex.split(self.cmd)]
+        argv = [a.replace("{skill}", str(SKILL_DIR)).replace("{repo}", str(SKILL_DIR.parents[1])) for a in shlex.split(self.cmd)]
         if "{prompt}" in argv:
             return [prompt if a == "{prompt}" else a for a in argv], None
         return argv, prompt  # no placeholder: prompt goes on stdin

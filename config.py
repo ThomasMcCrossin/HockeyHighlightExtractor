@@ -151,7 +151,7 @@ PENALTY_ALL_AFTER_SECONDS = 3.0
 GOAL_CLOCK_STOP_BEFORE_SECONDS = 32.0
 GOAL_CLOCK_STOP_AFTER_SECONDS = 3.0
 # Goals the clock can't time (frozen Flo bug) are placed from the broadcast's celebration by a
-# vision model (goal_locator.py; needs DEEPSEEK_API_KEY or SCOREBUG_VISION_API_KEY). False disables.
+# vision model (goal_locator.py; needs the optional vision endpoint, see hockey_extractor/vision.py). False disables.
 GOAL_VISION_LOCATOR = True
 GOAL_VISION_AFTER_SECONDS = 10.0
 GOAL_FALLBACK_BEFORE_SECONDS = 20.0

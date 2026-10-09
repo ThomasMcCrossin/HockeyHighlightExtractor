@@ -103,3 +103,21 @@ def test_apply_writes_reel_manifest_from_reviewed_windows(tmp_path):
     assert [c["clip_filename"] for c in manifest["clips"]] == ["01.mp4"]
     assert manifest["clips"][0]["review_status"] == "keep"
     assert reel.load_clips(game, Path(applied["manifests"]["main"]))[0]["_file"].endswith("01.mp4")
+
+
+def test_stub_agent_follows_the_agent_command_protocol(tmp_path):
+    """The example agent writes a verdict that the skill's checker accepts, from a prompt with spaces in paths."""
+    import subprocess
+    packet = tmp_path / "Games" / "Harbour Hawks vs Ridge Rams" / "packet"
+    packet.mkdir(parents=True)
+    bounds = {"lead_min": 15.0, "lead_max": 45, "tail_min": 8, "tail_max": 25, "len_min": 8, "len_max": 60, "near": 30,
+              "relocate_max": 240, "drop_min_confidence": 0.8, "tail_min_replay": 5, "tail_trim": 16.0,
+              "fight_pre": 10, "fight_post": 10, "engine_in": -32.0, "engine_out": 3.0, "video_from": -72.0, "video_to": 198.0}
+    (packet / "incident.json").write_text(json.dumps({"incident_id": "01_goal_p1_05-12", "kind": "goal", "class": "goal",
+                                                      "bounds": bounds}))
+    out = packet / "out" / "verdict.json"
+    prompt = f"Packet directory: {packet} . Start by reading it.\nWrite the verdict JSON to: {out}\nThen run something."
+    subprocess.run([sys.executable, str(REPO / "examples" / "stub_review_agent.py"), prompt], check=True, cwd=packet)
+    checked = subprocess.run([sys.executable, str(REPO / "skills" / "hockey-clip-review" / "scripts" / "check_verdict.py"),
+                              str(out), "--packet", str(packet), "--json"], capture_output=True, text=True)
+    assert json.loads(checked.stdout)["ok"], checked.stdout

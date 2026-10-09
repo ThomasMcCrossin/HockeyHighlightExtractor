@@ -50,8 +50,9 @@ def make_backend(kind: str, cmd: str, name: str, timeout: float):
         return ApiBackend(name=name or None)
     if kind == "escalate":
         return EscalateBackend(ApiBackend(), AgentBackend(cmd, "escalate-agent", timeout=timeout), name=name or "escalate")
-    return AgentBackend(cmd, name or ("agent-" + slug(" ".join(cmd.split()[:1] + [w for w in cmd.split() if "/" in w or ":" in w][:1]))[:40]),
-                        timeout=timeout)
+    first = cmd.split()[0] if cmd.split() else "agent"
+    label = "agent-" + slug(Path(first).name)[:40]
+    return AgentBackend(cmd, name or label, timeout=timeout)
 
 
 def main(argv=None) -> int:
