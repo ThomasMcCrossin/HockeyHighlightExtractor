@@ -177,10 +177,13 @@ MAJOR_PENALTY_BEFORE_SECONDS = 30.0
 MAJOR_PENALTY_AFTER_SECONDS = 90.0  # 1:30 after = ~2 min total clip
 MAJOR_REVIEW_TIMEOUT_DAYS = 7
 
-# ---------- Text overlay settings ----------
-OVERLAY_ENABLED = True
+# ---------- Text burned into engine clips ----------
+# Off by default: engine clips stay clean (and the vision reviewer sees the plain broadcast).
+# Graphics come from the overlay system when the reel is built (scripts/build_reel.py,
+# overlays/README.md). Turning this on burns a plain scorer/penalty caption into each clip.
+OVERLAY_ENABLED = False
 OVERLAY_FONT_SIZE = 42
-OVERLAY_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+OVERLAY_FONT = str(Path(__file__).resolve().parent / "assets" / "fonts" / "BarlowSemiCondensed-SemiBold.ttf")
 OVERLAY_DURATION_SECONDS = 5.0
 
 # ---------- Highlight execution profiles / reel modes ----------

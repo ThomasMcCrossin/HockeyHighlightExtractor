@@ -24,8 +24,24 @@ TEAM_KEYS = ("id", "name", "city", "nickname", "short", "logo", "primary", "seco
 
 
 class League:
+    """A league pack. `league_id` names a pack under overlays/leagues/ (or under a folder listed
+    in HOCKEY_LEAGUES_DIR); `League.from_pack(dict)` wraps one you built in code."""
+
     def __init__(self, league_id: str):
-        self.pack = json.loads((HERE / "leagues" / league_id / "league.json").read_text())
+        import os
+        dirs = [HERE / "leagues", *[Path(p) for p in os.environ.get("HOCKEY_LEAGUES_DIR", "").split(os.pathsep) if p]]
+        for root in reversed(dirs):
+            f = Path(root) / league_id / "league.json"
+            if f.exists():
+                self.pack = json.loads(f.read_text())
+                return
+        raise FileNotFoundError(f"no league pack '{league_id}' in {[str(d) for d in dirs]}")
+
+    @classmethod
+    def from_pack(cls, pack: dict) -> "League":
+        self = cls.__new__(cls)
+        self.pack = pack
+        return self
 
     def team(self, key) -> dict:
         k = str(key or "").strip().lower()

@@ -1,0 +1,75 @@
+{
+  "id": "demo-hockey",
+  "name": "Demo Hockey League (fictional test league)",
+  "short": "DHL",
+  "sport": "hockey",
+  "logo": "overlays/leagues/demo-hockey/logos/league.svg",
+  "primary": "#1b2a41",
+  "secondary": "#e0a526",
+  "fallback_logo": "assets/logos/fallback.png",
+  "periods": {
+    "1": "1st",
+    "2": "2nd",
+    "3": "3rd",
+    "4": "OT",
+    "5": "SO"
+  },
+  "clock": "remaining",
+  "period_minutes": {
+    "regulation": 20,
+    "overtime": 5
+  },
+  "provider": {
+    "type": "manual"
+  },
+  "teams": [
+    {
+      "id": "harbour-hawks",
+      "provider_id": "1",
+      "short": "HAW",
+      "city": "Harbour",
+      "nickname": "Hawks",
+      "name": "Harbour Hawks",
+      "logo": "overlays/leagues/demo-hockey/logos/harbour-hawks.svg",
+      "primary": "#14437a",
+      "secondary": "#0b2447",
+      "text": "#ffffff"
+    },
+    {
+      "id": "ridge-rams",
+      "provider_id": "2",
+      "short": "RRM",
+      "city": "Ridge",
+      "nickname": "Rams",
+      "name": "Ridge Rams",
+      "logo": "overlays/leagues/demo-hockey/logos/ridge-rams.svg",
+      "primary": "#b3262d",
+      "secondary": "#5e1216",
+      "text": "#ffffff"
+    },
+    {
+      "id": "northgate-wolves",
+      "provider_id": "3",
+      "short": "NGW",
+      "city": "Northgate",
+      "nickname": "Wolves",
+      "name": "Northgate Wolves",
+      "logo": "overlays/leagues/demo-hockey/logos/northgate-wolves.svg",
+      "primary": "#2f3b4a",
+      "secondary": "#161d26",
+      "text": "#ffffff"
+    },
+    {
+      "id": "saltmarsh-gulls",
+      "provider_id": "4",
+      "short": "SMG",
+      "city": "Saltmarsh",
+      "nickname": "Gulls",
+      "name": "Saltmarsh Gulls",
+      "logo": "overlays/leagues/demo-hockey/logos/saltmarsh-gulls.svg",
+      "primary": "#f2c230",
+      "secondary": "#3a2f0b",
+      "text": "#111111"
+    }
+  ]
+}

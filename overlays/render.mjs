@@ -44,8 +44,9 @@ const esc = (v) => String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt
 async function hydrate(spec) {
   const s = structuredClone(spec);
   const fallback = await dataUri(path.join(ROOT, "assets/logos/fallback.png"));
+  const resolve = (p) => (path.isAbsolute(p) ? p : path.join(ROOT, p));
   for (const key of ["league", "home", "away"]) {
-    if (s[key]) s[key].logo = (s[key].logo && (await dataUri(path.join(ROOT, s[key].logo)))) || fallback;
+    if (s[key]) s[key].logo = (s[key].logo && (await dataUri(resolve(s[key].logo)))) || fallback;
   }
   return s;
 }
