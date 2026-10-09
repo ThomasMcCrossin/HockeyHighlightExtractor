@@ -139,7 +139,7 @@ those keep the engine window.
 Reel modes (`--reel-mode`): `goals` (default), `with-rough` (fights and majors join the main
 reel in game order) and `separate-rough` (a second manifest, `reel_rough_stuff.json`).
 
-Incident classes are `goal`, `minor`, `major`, `fight`. Adding another (a scrum, for example) means
+Incident classes are `goal`, `minor`, `major`, `fight`, `scrum` (several penalties at one stoppage; `penalty_incidents.py`). Adding another means
 a `BOUNDS` entry and a classification rule in `clip_review/incidents.py` and a paragraph in the
 skill; see [architecture.md](architecture.md).
 

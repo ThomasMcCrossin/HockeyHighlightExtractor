@@ -23,9 +23,11 @@ recording + box score
 **Engine only (default).** Needs no AI and no account. The engine reads the game clock off the
 broadcast scorebug with OCR, matches each goal and penalty in the box score to a moment in the
 video and cuts a clip around it. This is what runs when you follow the quickstart. Expect
-clips that contain the event but are cut by a fixed window: goals often end as the celebration
-starts, and minor-penalty clips usually land after the call. In the bake-off below, blinded
-judges scored engine-only highlights 4.56 out of 10.
+clips that contain the event, cut by rules learned from judged highlights: about 32 s of build-up
+and 16 s of celebration around each goal, the foul and the referee's call on minor penalties, and
+one longer clip for a scrum (several penalties at one stoppage, or any major). In the 2026-10-08
+bake-off, blinded judges scored the earlier fixed-window engine 4.56 out of 10; the current rules
+were tuned on that judged data afterwards (see "Results").
 
 **With vision review (optional).** A reviewer looks at frames from the recording and chooses
 better in/out points: the build-up to a goal, the end of the celebration, the call on a penalty.
@@ -35,8 +37,8 @@ commands. It turns on by itself when you set an agent command or an API key, end
 and is skipped without a message otherwise. The best agent reviewer scored 7.09 out of 10 in the
 same test. Details, costs and the failure modes: [docs/vision-review.md](docs/vision-review.md).
 
-The engine is being improved separately and its numbers will move; the figures here are the
-2026-10-08 bake-off.
+The judged figures here are the 2026-10-08 bake-off; the engine-only number predates the
+learned clip windows and has not been re-judged since.
 
 ## Quickstart
 
@@ -142,6 +144,11 @@ games (blinded judges, 0 to 10 highlight score; full table, method and caveats i
 Every agent reviewer beat the engine. The one-shot API reviewer did not: it needs the agent's
 ability to go back for more frames. The ranking is highlight quality, not whether the goal is in
 the clip; the engine usually does contain the event.
+
+After the bake-off the engine's clip windows were re-tuned from the judges' data (goal tail 3 s ->
+16 s, minor penalties -2/+3 s -> -9/+14 s, scrums as one clip). On an offline check against the
+judged windows, clips covering build-up, moment and ending went from 26% to 81% (87% on held-out
+games). That is a coverage check, not a new blinded judging run.
 
 ## Notes
 
