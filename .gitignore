@@ -236,3 +236,15 @@ hockey_highlight_extractor.py  # Old monolithic file (replaced by modular struct
 *credentials*.json
 *service-account*.json
 *.Zone.Identifier
+
+# Project
+node_modules/
+package-lock.json
+overlays/out/
+Games/
+logs/
+temp/
+.env
+*.mp4
+!examples/**/*.mp4
+sample_data/
