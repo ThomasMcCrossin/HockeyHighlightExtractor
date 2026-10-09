@@ -38,23 +38,19 @@ def _parse_penalty_minutes(minutes_raw) -> List[int]:
 
 def _team_slug(team_value: str, our_team: str = 'ramblers') -> str:
     """
-    Normalize various team representations to 'ramblers' or 'opponent'.
+    Normalize a team representation to 'ramblers' (the followed team, kept as the internal
+    label) or 'opponent'.
 
-    Inputs may be slugs ('ramblers', 'opponent'), abbreviations ('AMH'),
-    or full names ('Amherst Ramblers').
+    `our_team` is the followed team's name, nickname or slug; any value that contains it, or is
+    contained by it, is the followed team. 'opponent' and 'opp' are always the other side.
     """
     v = (team_value or '').strip().lower()
     our = (our_team or '').strip().lower()
 
-    if v in {'ramblers', 'amherst-ramblers', 'amherst ramblers', 'amherst', 'amh'}:
-        return 'ramblers'
-    if 'rambler' in v or 'amherst' in v:
-        return 'ramblers'
-    if our and (our in v or v in our):
-        return 'ramblers'
-
     if v in {'opponent', 'opp'}:
         return 'opponent'
+    if v and our and (our in v or v in our):
+        return 'ramblers'
 
     return 'opponent'
 
@@ -231,7 +227,7 @@ def find_contributing_penalty(
     Args:
         goal: Goal data with period, time, team, power_play fields
         penalties: List of parsed penalties
-        our_team: Team identifier for "our" team (default 'ramblers')
+        our_team: followed team's name, nickname or slug
 
     Returns:
         The contributing penalty, or None if not found

@@ -4,6 +4,7 @@ from pathlib import Path
 
 def test_pipeline_inserts_contributing_penalty_before_pp_goal(tmp_path: Path):
     import config
+    from hockey_extractor.models import GameInfo
     from hockey_extractor.pipeline import HighlightPipeline
 
     class FakeVideoProcessor:
@@ -24,6 +25,10 @@ def test_pipeline_inserts_contributing_penalty_before_pp_goal(tmp_path: Path):
         video_processor=FakeVideoProcessor(),
     )
     pipeline.reel_mode = "goals_with_pp_penalties"
+    pipeline.game_info = GameInfo(
+        date="2026-01-09", home_team="Amherst Ramblers", away_team="Truro Bearcats",
+        league="MHL", filename="game.mp4", home_away="home",
+    )
 
     game_dir = tmp_path / "game"
     game_folders = {
@@ -91,6 +96,7 @@ def test_pipeline_inserts_contributing_penalty_before_pp_goal(tmp_path: Path):
 def test_pipeline_estimates_penalty_time_when_no_timestamps(tmp_path: Path):
     import json
     import config
+    from hockey_extractor.models import GameInfo
     from hockey_extractor.pipeline import HighlightPipeline
 
     class FakeVideoProcessor:
@@ -111,6 +117,10 @@ def test_pipeline_estimates_penalty_time_when_no_timestamps(tmp_path: Path):
         video_processor=FakeVideoProcessor(),
     )
     pipeline.reel_mode = "goals_with_pp_penalties"
+    pipeline.game_info = GameInfo(
+        date="2026-01-09", home_team="Amherst Ramblers", away_team="Truro Bearcats",
+        league="MHL", filename="game.mp4", home_away="home",
+    )
 
     game_dir = tmp_path / "game"
     game_folders = {
@@ -173,6 +183,7 @@ def test_pipeline_estimates_penalty_time_when_no_timestamps(tmp_path: Path):
 def test_pipeline_goals_only_mode_skips_pp_penalty_insertion(tmp_path: Path):
     import json
     import config
+    from hockey_extractor.models import GameInfo
     from hockey_extractor.pipeline import HighlightPipeline
 
     class FakeVideoProcessor:
@@ -256,6 +267,7 @@ def test_pipeline_goals_only_mode_skips_pp_penalty_insertion(tmp_path: Path):
 def test_pipeline_clock_stop_goals_get_extra_preroll(tmp_path: Path):
     import json
     import config
+    from hockey_extractor.models import GameInfo
     from hockey_extractor.pipeline import HighlightPipeline
 
     class FakeVideoProcessor:
@@ -317,6 +329,7 @@ def test_pipeline_clock_stop_goals_get_extra_preroll(tmp_path: Path):
 
 def test_pipeline_includes_all_penalties_in_chronological_order(tmp_path: Path):
     import config
+    from hockey_extractor.models import GameInfo
     from hockey_extractor.pipeline import HighlightPipeline
 
     class FakeVideoProcessor:
@@ -347,6 +360,10 @@ def test_pipeline_includes_all_penalties_in_chronological_order(tmp_path: Path):
     for path in pipeline.game_folders.values():
         Path(path).mkdir(parents=True, exist_ok=True)
     pipeline.reel_mode = "goals_with_all_penalties"
+    pipeline.game_info = GameInfo(
+        date="2026-01-09", home_team="Amherst Ramblers", away_team="Truro Bearcats",
+        league="MHL", filename="game.mp4", home_away="home",
+    )
     pipeline.matched_events = [
         {
             "type": "goal",
@@ -400,6 +417,7 @@ def test_pipeline_includes_all_penalties_in_chronological_order(tmp_path: Path):
 
 def test_all_penalties_mode_skips_major_review_workflow(tmp_path: Path):
     import config
+    from hockey_extractor.models import GameInfo
     from hockey_extractor.pipeline import HighlightPipeline
 
     class FakeVideoProcessor:
@@ -411,6 +429,10 @@ def test_all_penalties_mode_skips_major_review_workflow(tmp_path: Path):
         video_processor=FakeVideoProcessor(),
     )
     pipeline.reel_mode = "goals_with_all_penalties"
+    pipeline.game_info = GameInfo(
+        date="2026-01-09", home_team="Amherst Ramblers", away_team="Truro Bearcats",
+        league="MHL", filename="game.mp4", home_away="home",
+    )
     pipeline.box_score = {
         "SiteKit": {
             "Gamesummary": {
@@ -435,6 +457,7 @@ def test_all_penalties_mode_skips_major_review_workflow(tmp_path: Path):
 
 def test_invalid_reel_mode_returns_structured_failure(tmp_path: Path):
     import config
+    from hockey_extractor.models import GameInfo
     from hockey_extractor.pipeline import HighlightPipeline
 
     pipeline = HighlightPipeline(config=config, video_path=tmp_path / "dummy.mp4", video_processor=object())

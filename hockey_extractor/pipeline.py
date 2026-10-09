@@ -224,12 +224,12 @@ class HighlightPipeline:
                 context.setdefault(key, value)
 
         if isinstance(self.box_score, dict):
-            amherst_payload = self.box_score.get("_amherst_display")
-            if isinstance(amherst_payload, dict):
+            source_payload = self.box_score.get("_source_context")
+            if isinstance(source_payload, dict):
                 for key in ("playoff", "schedule_notes", "result", "date", "game_number"):
-                    if amherst_payload.get(key) not in (None, ""):
-                        context[key] = amherst_payload.get(key)
-                game_meta = amherst_payload.get("game_info")
+                    if source_payload.get(key) not in (None, ""):
+                        context[key] = source_payload.get(key)
+                game_meta = source_payload.get("game_info")
                 if isinstance(game_meta, dict):
                     for key in ("playoff", "schedule_notes", "result", "game_number"):
                         if game_meta.get(key) not in (None, ""):
@@ -1839,6 +1839,17 @@ class HighlightPipeline:
             "after_seconds": length,
         }
 
+    def _followed_team(self) -> str:
+        """The team the highlights follow: config.FOLLOWED_TEAM, else the team the recording is
+        filed under (the away team when home_away is 'away', otherwise the home team)."""
+        configured = str(getattr(self.config, 'FOLLOWED_TEAM', '') or '').strip()
+        if configured:
+            return configured
+        info = self.game_info
+        if info is None:
+            return ''
+        return info.away_team if info.home_away == 'away' else info.home_team
+
     def _step6_create_clips(
         self,
         before_seconds: float = 15.0,
@@ -1894,7 +1905,7 @@ class HighlightPipeline:
                 time_is_elapsed = bool(getattr(self.config, 'BOX_SCORE_TIME_IS_ELAPSED', True))
                 for penalty_info in parse_penalties(
                     penalties_data,
-                    our_team='ramblers',
+                    our_team=self._followed_team(),
                     time_is_elapsed=time_is_elapsed,
                 ):
                     if penalty_info.video_time is None:
@@ -1923,7 +1934,7 @@ class HighlightPipeline:
                 penalty_analysis = analyze_game_penalties(
                     goal_events,
                     penalties_data,
-                    our_team='ramblers',
+                    our_team=self._followed_team(),
                     time_is_elapsed=time_is_elapsed,
                 )
                 pp_penalty_map = penalty_analysis.get('pp_penalty_map', {})
@@ -2431,6 +2442,8 @@ class HighlightPipeline:
 
         # Build game data dict for description generator
         game_data = {
+            'team_name': self._followed_team(),
+            'hashtags': str(getattr(self.config, 'DESCRIPTION_HASHTAGS', '') or ''),
             'date': self.game_info.date,
             'home_game': self.game_info.home_away == 'home',
             'opponent': {
@@ -2458,7 +2471,8 @@ class HighlightPipeline:
         desc_path = generate_and_save_description(
             game_data,
             matched_goals,
-            self.game_folders['output_dir']
+            self.game_folders['output_dir'],
+            our_team=self._followed_team(),
         )
 
         logger.info(f"✅ YouTube description saved: {desc_path}")

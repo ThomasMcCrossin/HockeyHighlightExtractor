@@ -99,7 +99,7 @@ SCOREBUG_PROFILES: tuple[ScorebugProfile, ...] = (
         preprocess_family="yarmouth",
         league="MHL",
         home_team="Yarmouth Mariners",
-        notes="Seeded from prior Amherst/Yarmouth tests. Expand with more fixtures later.",
+        notes="Seeded from early test recordings. Expand with more fixtures later.",
     ),
     ScorebugProfile(
         profile_id="mhl_flo_stacked_topleft",
@@ -120,7 +120,7 @@ SCOREBUG_PROFILES: tuple[ScorebugProfile, ...] = (
         roi_method="flo_strip",
         preprocess_family="flohockey",
         league="MHL",
-        notes="Default MHL layout. 2025-26 Amherst home; 2026-27 at Pictou, Grand Falls, Valley and Amherst.",
+        notes="Default MHL layout. Flo MHL broadcasts since 2025-26.",
     ),
     ScorebugProfile(
         profile_id="flo_corner_period_first",

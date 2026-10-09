@@ -22,14 +22,9 @@ from .time_utils import time_string_to_seconds
 logger = logging.getLogger(__name__)
 
 
-def _current_mhl_season_id() -> Optional[str]:
-    """First season id from config/hockeytech.json; None lets HockeyTech pick its default."""
-    try:
-        from season import season_ids
-        ids = season_ids()
-        return ids[0] if ids else None
-    except Exception:
-        return None
+def _current_season_id() -> Optional[str]:
+    """Season id from HOCKEYTECH_SEASON_ID; None lets HockeyTech pick its default season."""
+    return (os.environ.get("HOCKEYTECH_SEASON_ID") or "").strip() or None
 
 
 class BoxScoreFetcher:
@@ -38,19 +33,22 @@ class BoxScoreFetcher:
     # HockeyTech API base URL
     API_BASE = "https://lscluster.hockeytech.com/feed/"
 
-    # League configurations
-    LEAGUE_CONFIGS = {
-        'MHL': {
-            'client_code': 'mhl',
-            'league_id': '1',
-            'season_id': _current_mhl_season_id(),
-        },
-        'BSHL': {
-            'client_code': 'bshl',
-            'league_id': '1',  # Update with actual BSHL league ID
-            'season_id': None
+    @staticmethod
+    def _league_config(league: str) -> Optional[Dict[str, Any]]:
+        """HockeyTech client settings for a league, from its pack's `provider` block.
+
+        The pack may also name a `season_id`; otherwise config/hockeytech.json  or HockeyTech's own default applies.
+        """
+        from . import leagues
+
+        provider = leagues.provider_config(league)
+        if provider.get('type') != 'hockeytech' or not provider.get('client_code'):
+            return None
+        return {
+            'client_code': provider['client_code'],
+            'league_id': str(provider.get('league_id', '1')),
+            'season_id': provider.get('season_id') or _current_season_id(),
         }
-    }
 
     def __init__(self, cache_dir: Optional[Path] = None, *, api_key: Optional[str] = None):
         """
@@ -112,7 +110,7 @@ class BoxScoreFetcher:
         Find game ID for specified matchup
 
         Args:
-            league: League identifier (MHL, BSHL)
+            league: League pack id or short name (a pack with a hockeytech provider)
             home_team: Home team name
             away_team: Away team name
             game_date: Game date (YYYY-MM-DD)
@@ -124,7 +122,7 @@ class BoxScoreFetcher:
             self._require_api_key()
 
             # Get league configuration
-            config = self.LEAGUE_CONFIGS.get(league.upper())
+            config = self._league_config(league)
             if not config:
                 logger.warning(f"Unknown league: {league}")
                 return None
@@ -214,7 +212,7 @@ class BoxScoreFetcher:
         Fetch box score for specified game
 
         Args:
-            league: League identifier (MHL, BSHL)
+            league: League pack id or short name (a pack with a hockeytech provider)
             game_id: Game ID
 
         Returns:
@@ -230,7 +228,7 @@ class BoxScoreFetcher:
                         return json.load(f)
 
             # Get league configuration
-            config = self.LEAGUE_CONFIGS.get(league.upper())
+            config = self._league_config(league)
             if not config:
                 logger.warning(f"Unknown league: {league}")
                 return None

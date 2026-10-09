@@ -377,15 +377,15 @@ class OCREngine:
                 return roi
 
             elif method in ('mhl_amherst', 'flo_strip'):
-                # Flo's standard MHL strip (2025-26 Amherst home, league-wide in 2026-27).
-                # Amherst home broadcasts use a lighter full-width strip. The right
+                # Flo's standard MHL strip (league-wide since 2026-27).
+                # Some home broadcasts use a lighter full-width strip. The right
                 # clock block is slightly wider than the Summerside layout.
                 y_start = 0
                 roi_height = max(60, int(height * 0.09))
                 x_start = int(width * 0.58)
                 roi_width = max(340, int(width * 0.19))
                 roi = (x_start, y_start, roi_width, roi_height)
-                logger.info(f"MHL Amherst ROI: {roi}")
+                logger.info(f"MHL home-venue ROI: {roi}")
                 return roi
 
             elif method == 'yarmouth':

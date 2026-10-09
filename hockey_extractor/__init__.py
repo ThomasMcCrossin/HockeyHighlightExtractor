@@ -6,7 +6,6 @@ and OCR-based time matching.
 """
 
 from .version import __version__
-__author__ = "Thomas McCrossin"
 
 # Core processors
 try:
@@ -39,11 +38,11 @@ from .time_utils import (
 # Pipeline
 from .pipeline import HighlightPipeline
 
-# Amherst Display Integration
-from .amherst_integration import (
-    AmherstBoxScoreProvider,
+# Box-score providers (HockeyTech feed, manual JSON)
+from .providers import (
+    HockeyTechProvider,
+    ManualBoxScoreProvider,
     PreloadedBoxScoreFetcher,
-    find_amherst_display_path,
 )
 
 __all__ = [
@@ -73,8 +72,8 @@ __all__ = [
     'parse_period_string',
     'PERIOD_LENGTH_MINUTES',
     'PERIOD_LENGTH_SECONDS',
-    # Amherst Display Integration
-    'AmherstBoxScoreProvider',
+    # Box-score providers
+    'HockeyTechProvider',
+    'ManualBoxScoreProvider',
     'PreloadedBoxScoreFetcher',
-    'find_amherst_display_path',
 ]
